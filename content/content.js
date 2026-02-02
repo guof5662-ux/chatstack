@@ -5,7 +5,7 @@
 
 class ChatGPTSidebarExtension {
   constructor() {
-    this.DEBUG = true;
+    this.DEBUG = false;
     this.initialized = false;
   }
 
@@ -258,35 +258,77 @@ class ChatGPTSidebarExtension {
   // 创建扩展实例
   const extension = new ChatGPTSidebarExtension();
 
+  function showPageToast(message, duration = 3000) {
+    const id = 'chatgpt-sidebar-page-toast';
+    const existing = document.getElementById(id);
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = id;
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:12px 20px;background:#1f2937;color:#f9fafb;font-size:14px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:999999;';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.2s';
+      setTimeout(() => toast.remove(), 200);
+    }, duration);
+  }
+
+  // 检查扩展上下文是否有效
+  function isExtensionContextValid() {
+    try {
+      return !!(chrome && chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  }
+
   // 响应扩展图标点击：切换侧边栏显示
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg && msg.type === 'TOGGLE_SIDEBAR') {
-      (async () => {
-        try {
-          const sidebarEl = document.getElementById('chatgpt-sidebar-extension');
-          if (sidebarEl && window.sidebarUI) {
-            window.sidebarUI.toggle();
-            sendResponse({ ok: true });
-            return;
-          }
-          // 侧边栏尚未注入：先完成初始化再显示
-          if (!extension.initialized) {
-            await extension.init();
-          }
-          if (window.sidebarUI) {
-            window.sidebarUI.show();
-            sendResponse({ ok: true });
-          } else {
+  if (isExtensionContextValid()) {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg && msg.type === 'TOGGLE_SIDEBAR') {
+        (async () => {
+          try {
+            if (!isExtensionContextValid()) {
+              sendResponse({ ok: false });
+              return;
+            }
+            if (!window.location.href.includes('/c/')) {
+              const text = window.i18nManager ? window.i18nManager.t('toast.openConversationFirst') : '请先打开或创建一个对话';
+              showPageToast(text);
+              sendResponse({ ok: false });
+              return;
+            }
+            const sidebarEl = document.getElementById('chatgpt-sidebar-extension');
+            if (sidebarEl && window.sidebarUI) {
+              window.sidebarUI.toggle();
+              sendResponse({ ok: true });
+              return;
+            }
+            // 侧边栏尚未注入：先完成初始化再显示
+            if (!extension.initialized) {
+              await extension.init();
+            }
+            if (window.sidebarUI) {
+              window.sidebarUI.show();
+              sendResponse({ ok: true });
+            } else {
+              sendResponse({ ok: false });
+            }
+          } catch (e) {
+            if (e && e.message && e.message.includes('Extension context invalidated')) {
+              console.log('[ChatGPT Sidebar] Extension context invalidated');
+              sendResponse({ ok: false });
+              return;
+            }
+            console.error('[ChatGPT Sidebar] Toggle error:', e);
             sendResponse({ ok: false });
           }
-        } catch (e) {
-          console.error('[ChatGPT Sidebar] Toggle error:', e);
-          sendResponse({ ok: false });
-        }
-      })();
-      return true; // 保持 sendResponse 异步有效
-    }
-  });
+        })();
+        return true; // 保持 sendResponse 异步有效
+      }
+    });
+  }
 
   function tryInitOnConversationPage() {
     const currentUrl = location.href;

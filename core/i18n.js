@@ -90,6 +90,7 @@ class I18nManager {
         'action.dragToResize': '拖拽调整宽度',
         'action.close': '关闭',
         'action.export': '下载',
+        'action.back': '返回',
         'export.format': '格式',
         'export.zip': '打包ZIP',
         'export.selectAll': '全选',
@@ -102,6 +103,9 @@ class I18nManager {
         'export.noSelection': '请先选择要导出的内容',
         'export.zipUnavailable': 'ZIP 模块不可用',
         'export.done': '已开始下载',
+        'export.hint.toc': '点击对话卡片可取消选择（默认全选）',
+        'export.hint.history': '点击对话卡片可选择/取消',
+        'export.hint.projects': '点击文件夹选择全部；展开后点击卡片选择/取消',
 
         // 时间（formatTimeAgo）
         'time.justNow': '刚刚',
@@ -112,6 +116,7 @@ class I18nManager {
         // 平台筛选
         'filter.allPlatforms': '全部平台',
         'filter.selectedPlatforms': '已选 {n} 个平台',
+        'search.matchCount': '内容匹配 {n}',
 
         // TOC/对话条目
         'toc.expand': '展开',
@@ -130,12 +135,13 @@ class I18nManager {
         'conv.openInNewTab': '在新标签打开',
         'conv.dragToProject': '拖动到其他项目',
         'conv.delete': '删除',
+        'conv.removeFromProject': '从项目移出',
         'conv.loadFailed': '加载失败',
         'conv.contentMatches': '内容匹配 {n}',
 
         // 消息内搜索浮层
         'msgSearch.ariaLabel': '在当前消息内高亮关键词',
-        'msgSearch.placeholder': '在当前消息内高亮关键词，Enter 跳转下一处',
+        'msgSearch.placeholder': '高亮定位关键词，Enter 跳转下一处',
 
         // 日期选择器
         'datePicker.prevYear': '上一年',
@@ -169,6 +175,7 @@ class I18nManager {
         'dialog.confirm': '确定',
         'dialog.createProjectAndAdd': '新建项目并添加',
         'dialog.createProjectAndAddPlaceholder': '请输入项目名称:',
+        'dialog.confirmRemoveFromProject': '确定从项目中移出此对话？',
 
         // Toast 消息
         'toast.progressRestored': '进度已恢复',
@@ -188,6 +195,7 @@ class I18nManager {
         'toast.bookmarkSuccess': '书签添加成功',
         'toast.movedToProject': '已移动到当前项目',
         'toast.cannotGetSessionId': '无法获取会话 ID',
+        'toast.openConversationFirst': '请先打开或创建一个对话',
 
         // 对话/项目 UI
         'conv.unnamed': '未命名对话',
@@ -282,6 +290,7 @@ class I18nManager {
         'action.backToList': 'Back to list',
         'action.dragToResize': 'Drag to resize',
         'action.close': 'Close',
+        'action.back': 'Back',
         'action.export': 'Download',
         'export.format': 'Format',
         'export.zip': 'ZIP',
@@ -295,6 +304,9 @@ class I18nManager {
         'export.noSelection': 'Select items to export',
         'export.zipUnavailable': 'ZIP module unavailable',
         'export.done': 'Download started',
+        'export.hint.toc': 'Click a card to deselect (current conversation is preselected)',
+        'export.hint.history': 'Click a card to select/deselect',
+        'export.hint.projects': 'Click a folder to select all, or expand and click cards',
 
         // Time (formatTimeAgo)
         'time.justNow': 'Just now',
@@ -305,6 +317,7 @@ class I18nManager {
         // Platform filter
         'filter.allPlatforms': 'All platforms',
         'filter.selectedPlatforms': '{n} selected',
+        'search.matchCount': 'Matches {n}',
 
         // TOC / conversation items
         'toc.expand': 'Expand',
@@ -323,12 +336,13 @@ class I18nManager {
         'conv.openInNewTab': 'Open in new tab',
         'conv.dragToProject': 'Drag to another project',
         'conv.delete': 'Delete',
+        'conv.removeFromProject': 'Remove from project',
         'conv.loadFailed': 'Failed to load',
         'conv.contentMatches': 'Matches {n}',
 
         // In-message search overlay
         'msgSearch.ariaLabel': 'Highlight keyword in this message',
-        'msgSearch.placeholder': 'Highlight keyword, Enter for next',
+        'msgSearch.placeholder': 'Highlight and locate keywords, Enter for next',
 
         // Date picker
         'datePicker.prevYear': 'Previous year',
@@ -362,6 +376,7 @@ class I18nManager {
         'dialog.confirm': 'OK',
         'dialog.createProjectAndAdd': 'Create project and add',
         'dialog.createProjectAndAddPlaceholder': 'Enter project name:',
+        'dialog.confirmRemoveFromProject': 'Remove this conversation from project?',
 
         // Toast messages
         'toast.progressRestored': 'Progress restored',
@@ -381,6 +396,7 @@ class I18nManager {
         'toast.bookmarkSuccess': 'Bookmark added',
         'toast.movedToProject': 'Moved to project',
         'toast.cannotGetSessionId': 'Cannot get session ID',
+        'toast.openConversationFirst': 'Please open or create a conversation first',
 
         // Conversation / project UI
         'conv.unnamed': 'Unnamed conversation',
