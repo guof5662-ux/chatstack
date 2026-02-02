@@ -40,6 +40,8 @@ class SidebarUI {
     this.progressRestoredForConversationId = null;
     // 上一轮 updateMessages 的会话 ID，用于区分「刚进入会话」与「同会话内打开侧栏/流式更新」从而避免打开插件时自动上滚
     this._prevUpdateConversationId = null;
+    this.lastNonSettingsTab = 'toc';
+    this.msgSearchPersist = null;
     // 导出模式状态
     this.exportState = { active: false, scope: null, selected: new Set(), formats: { json: true, md: false, txt: false }, zip: true };
   }
@@ -47,6 +49,18 @@ class SidebarUI {
   log(...args) {
     if (this.DEBUG) {
       console.log('[SidebarUI]', ...args);
+    }
+  }
+
+  /**
+   * 检查扩展上下文是否有效（扩展重载后旧脚本上下文会失效）
+   * @returns {boolean}
+   */
+  isExtensionContextValid() {
+    try {
+      return !!(chrome && chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
     }
   }
 
@@ -101,11 +115,12 @@ class SidebarUI {
           <span class="export-count" id="${countId}">${this._t('export.selected', { n: '0' })}</span>
         </div>
         <div class="export-actions">
-          <button type="button" class="btn btn-secondary btn-small" data-action="select-all" data-i18n="export.selectAll">${this._t('export.selectAll')}</button>
+          <button type="button" class="btn btn-secondary btn-small export-select-all-btn" data-action="select-all" data-i18n="export.selectAll">${this._t('export.selectAll')}</button>
           <button type="button" class="btn btn-secondary btn-small" data-action="clear" data-i18n="export.clear">${this._t('export.clear')}</button>
           <button type="button" class="btn btn-secondary btn-small" data-action="cancel" data-i18n="export.cancel">${this._t('export.cancel')}</button>
           <button type="button" class="btn btn-primary btn-small" data-action="download" data-i18n="export.download">${this._t('export.download')}</button>
         </div>
+        <div class="export-hint"></div>
       </div>
     `;
   }
@@ -114,6 +129,11 @@ class SidebarUI {
    * 注入侧边栏到页面
    */
   inject() {
+    if (!this.isExtensionContextValid()) {
+      this.log('Extension context invalidated, skipping inject');
+      return;
+    }
+
     const existing = document.getElementById('chatgpt-sidebar-extension');
     if (existing && existing.isConnected) {
       this.shadowHost = existing;
@@ -170,19 +190,36 @@ class SidebarUI {
    * 加载样式到 Shadow DOM
    */
   async loadStyles() {
-    const styleUrl = chrome.runtime.getURL('content/sidebar.css');
-    const response = await fetch(styleUrl);
-    const cssText = await response.text();
+    try {
+      if (!this.isExtensionContextValid()) {
+        this.log('Extension context invalidated, skipping loadStyles');
+        return;
+      }
+      const styleUrl = chrome.runtime.getURL('content/sidebar.css');
+      const response = await fetch(styleUrl);
+      const cssText = await response.text();
 
-    const style = document.createElement('style');
-    style.textContent = cssText;
-    this.shadowRoot.appendChild(style);
+      const style = document.createElement('style');
+      style.textContent = cssText;
+      this.shadowRoot.appendChild(style);
+    } catch (error) {
+      if (error && error.message && error.message.includes('Extension context invalidated')) {
+        this.log('Extension context invalidated during loadStyles');
+        return;
+      }
+      console.error('[SidebarUI] loadStyles error:', error);
+    }
   }
 
   /**
    * 创建侧边栏容器
    */
   createContainer() {
+    if (!this.isExtensionContextValid()) {
+      this.log('Extension context invalidated, skipping createContainer');
+      return;
+    }
+
     this.container = document.createElement('div');
     this.container.className = 'sidebar-container sidebar-hidden';
 
@@ -191,11 +228,12 @@ class SidebarUI {
       this.container.classList.add('dark');
     }
 
+    const iconUrl = this.isExtensionContextValid() ? chrome.runtime.getURL('icons/float-icon.png') : '';
     this.container.innerHTML = `
       <div class="sidebar-resize-handle" id="sidebar-resize-handle" data-i18n-title="action.dragToResize" title="拖拽调整宽度"></div>
       <div class="sidebar-card">
       <div class="sidebar-header">
-        <img src="${chrome.runtime.getURL('icons/float-icon.png')}" alt="" class="sidebar-header-icon" />
+        <img src="${iconUrl}" alt="" class="sidebar-header-icon" />
         <div class="sidebar-header-right">
           <div class="sidebar-header-top">
             <h2 class="sidebar-title" data-i18n="header.title">ChatStack</h2>
@@ -322,9 +360,6 @@ class SidebarUI {
 
         <!-- Projects Tab -->
         <div class="tab-panel" data-panel="projects">
-          <div class="action-bar">
-            <button class="btn btn-primary btn-small" id="btn-create-project" data-i18n="project.create">+ 新建项目</button>
-          </div>
           <div class="search-and-filter-wrap" id="projects-search-and-filter-wrap">
             <div class="search-box search-box-with-filter">
               <input type="text" class="search-input" data-i18n-placeholder="filter.search.projects" placeholder="搜索项目或对话标题..." id="projects-search-input" aria-label="搜索项目">
@@ -385,6 +420,7 @@ class SidebarUI {
           <div class="project-section">
             <div class="project-section-header" data-section="my">
               <h3 class="project-section-title">👤 My Projects</h3>
+              <button class="btn btn-primary btn-small project-header-create-btn" id="btn-create-project" data-i18n="project.create">+ 新建项目</button>
               <span class="project-section-toggle" aria-hidden="true">${this.getIcon('chevronDown')}</span>
             </div>
             <ul class="project-list" id="my-projects-list"></ul>
@@ -394,6 +430,12 @@ class SidebarUI {
         <!-- Settings Tab (opened via header Settings button) -->
         <div class="tab-panel" data-panel="settings">
           <div class="settings-panel">
+            <div class="settings-header">
+              <button type="button" class="settings-back-btn" id="btn-settings-back" data-i18n-title="action.back" data-i18n-aria-label="action.back" title="返回" aria-label="返回">
+                ${this.getIcon('back')}
+                <span class="settings-back-text" data-i18n="action.back">返回</span>
+              </button>
+            </div>
             <!-- 自动保存开关 -->
             <div class="settings-section">
               <h3 class="settings-section-title" data-i18n="settings.autoSave.title">自动保存</h3>
@@ -606,6 +648,11 @@ async applySavedWidth() {
   }
 
   createFloatButton() {
+    if (!this.isExtensionContextValid()) {
+      this.log('Extension context invalidated, skipping createFloatButton');
+      return;
+    }
+
     let existing = document.getElementById('chatgpt-sidebar-float-btn');
     if (existing) {
       this.floatButton = existing;
@@ -621,7 +668,7 @@ async applySavedWidth() {
     this.floatButtonVisual = document.createElement('div');
     this.floatButtonVisual.className = 'chatgpt-sidebar-float-btn-visual';
     const floatImg = document.createElement('img');
-    floatImg.src = chrome.runtime.getURL('icons/float-icon.png');
+    floatImg.src = this.isExtensionContextValid() ? chrome.runtime.getURL('icons/float-icon.png') : '';
     floatImg.alt = this._t('float.openSidebar');
     floatImg.className = 'chatgpt-sidebar-float-btn-icon';
     this.floatButtonVisual.appendChild(floatImg);
@@ -1029,7 +1076,16 @@ async applySavedWidth() {
     });
 
     this.shadowRoot.getElementById('btn-sidebar-settings')?.addEventListener('click', () => {
-      this.switchTab('settings');
+      if (this.currentTab === 'settings') {
+        this.switchTab(this.lastNonSettingsTab || 'toc');
+      } else {
+        this.lastNonSettingsTab = this.currentTab || 'toc';
+        this.switchTab('settings');
+      }
+    });
+
+    this.shadowRoot.getElementById('btn-settings-back')?.addEventListener('click', () => {
+      this.switchTab(this.lastNonSettingsTab || 'toc');
     });
 
     this.shadowRoot.getElementById('btn-toc-export')?.addEventListener('click', () => this.toggleExportMode('toc'));
@@ -1279,7 +1335,8 @@ async applySavedWidth() {
     });
 
     // 按钮事件
-    this.shadowRoot.getElementById('btn-create-project').addEventListener('click', () => {
+    this.shadowRoot.getElementById('btn-create-project').addEventListener('click', (e) => {
+      e.stopPropagation();
       this.showCreateProjectDialog();
     });
 
@@ -1344,6 +1401,7 @@ async applySavedWidth() {
           }
           if (this.exportState.active) {
             this.updateExportCount();
+            this.updateExportHint();
           }
         }
         this.log('Language changed to:', lang);
@@ -1403,6 +1461,10 @@ async applySavedWidth() {
     const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
     if (bar) bar.style.display = 'flex';
     this.syncExportFormatsToUI();
+    this.updateExportHint();
+    if (scope === 'toc') {
+      this.selectAllInScope(scope);
+    }
     this.updateExportCount();
   }
 
@@ -1431,6 +1493,19 @@ async applySavedWidth() {
     });
     const zipInput = bar.querySelector('input[data-zip]');
     if (zipInput) zipInput.checked = !!this.exportState.zip;
+  }
+
+  updateExportHint() {
+    const scope = this.exportState.scope;
+    if (!scope) return;
+    const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
+    if (!bar) return;
+    const hintEl = bar.querySelector('.export-hint');
+    if (!hintEl) return;
+    let key = 'export.hint.history';
+    if (scope === 'toc') key = 'export.hint.toc';
+    else if (scope === 'projects') key = 'export.hint.projects';
+    hintEl.textContent = this._t(key);
   }
 
   updateExportCount() {
@@ -1472,8 +1547,45 @@ async applySavedWidth() {
       const key = this.getExportKeyFromDot(dot);
       const selected = key && this.exportState.selected.has(key);
       dot.classList.toggle('selected', !!selected);
+      const container = dot.closest('.toc-item, .conv-card, .project-item-header');
+      if (container) {
+        container.classList.toggle('export-selected', !!selected);
+        container.setAttribute('aria-selected', selected ? 'true' : 'false');
+      }
     });
     this.updateExportCount();
+    this.updateSelectAllButtonState();
+  }
+
+  selectAllInScope(scope) {
+    const dots = this.shadowRoot.querySelectorAll(`.export-select-dot[data-scope="${scope}"]`);
+    dots.forEach((dot) => {
+      const key = this.getExportKeyFromDot(dot);
+      if (key) this.exportState.selected.add(key);
+    });
+    this.syncExportSelectionUI();
+  }
+
+  isAllSelectedInScope(scope) {
+    const dots = this.shadowRoot.querySelectorAll(`.export-select-dot[data-scope="${scope}"]`);
+    if (!dots.length) return false;
+    let selectedCount = 0;
+    dots.forEach((dot) => {
+      const key = this.getExportKeyFromDot(dot);
+      if (key && this.exportState.selected.has(key)) selectedCount += 1;
+    });
+    return selectedCount === dots.length;
+  }
+
+  updateSelectAllButtonState() {
+    const scope = this.exportState.scope;
+    if (!scope) return;
+    const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
+    if (!bar) return;
+    const btn = bar.querySelector('.export-select-all-btn');
+    if (!btn) return;
+    const isAllSelected = this.isAllSelectedInScope(scope);
+    btn.classList.toggle('active', isAllSelected);
   }
 
   handleExportBarAction(btn) {
@@ -1492,12 +1604,12 @@ async applySavedWidth() {
     if (action === 'select-all') {
       const scope = this.exportState.scope;
       if (!scope) return;
-      const dots = this.shadowRoot.querySelectorAll(`.export-select-dot[data-scope="${scope}"]`);
-      dots.forEach((dot) => {
-        const key = this.getExportKeyFromDot(dot);
-        if (key) this.exportState.selected.add(key);
-      });
-      this.syncExportSelectionUI();
+      if (this.isAllSelectedInScope(scope)) {
+        this.exportState.selected.clear();
+        this.syncExportSelectionUI();
+      } else {
+        this.selectAllInScope(scope);
+      }
       return;
     }
     if (action === 'download') {
@@ -1535,6 +1647,7 @@ async applySavedWidth() {
       const zipName = `chatstack_export_${this.formatDateForFileName(Date.now())}.zip`;
       this.downloadBlob(blob, zipName);
       this.showToast(this._t('export.done'));
+      this.selectAllInScope(this.exportState.scope);
       return;
     }
 
@@ -1544,6 +1657,7 @@ async applySavedWidth() {
       this.downloadBlob(blob, f.name);
     }
     this.showToast(this._t('export.done'));
+    this.selectAllInScope(this.exportState.scope);
   }
 
   async buildExportFiles(formats) {
@@ -1824,6 +1938,10 @@ async applySavedWidth() {
     if (this.exportState.active) {
       this.exitExportMode();
     }
+    this.stashMsgSearchOverlayForNextTab(tabName);
+    if (tabName !== 'settings') {
+      this.lastNonSettingsTab = tabName;
+    }
     this.currentTab = tabName;
     if (this.container) {
       this.container.classList.toggle('settings-only', tabName === 'settings');
@@ -1855,7 +1973,6 @@ async applySavedWidth() {
       this.switchTocView(tabName);
     }
 
-    if (tabName !== 'toc' && tabName !== 'conversations') this.closeMsgSearchOverlay();
     if (tabName === 'projects') {
       (async () => {
         const needRestore = this.projectsViewState?.level === 'conversation' && this.projectsViewState?.conversationId;
@@ -1870,6 +1987,7 @@ async applySavedWidth() {
         if (needRestore && sections.length) {
           sections.forEach((el) => { el.style.opacity = ''; });
         }
+        this.restoreMsgSearchOverlayForTab('projects');
       })();
     }
 
@@ -1955,12 +2073,14 @@ async applySavedWidth() {
     // 加载对应数据（切回当前对话时重绘 TOC，保证角色标签等随当前语言更新）
     if (viewName === 'toc') {
       this.renderTOC();
+      this.restoreMsgSearchOverlayForTab('toc');
     } else if (viewName === 'conversations') {
       // 如果之前在查看某个对话详情，则恢复到那个详情页面
       if (this.viewingConversationId) {
         this.renderConversationDetailInToc(this.viewingConversationId);
       } else {
         this.renderConversationsList();
+        this.restoreMsgSearchOverlayForTab('conversations');
       }
     }
 
@@ -2117,14 +2237,16 @@ async applySavedWidth() {
       let fullContentHtml = this.getFullContentHtml(item.messageId, content);
       fullContentHtml = this.applyHighlightToTextContentOnly(fullContentHtml, kw);
 
-      const containsKeyword = kw && content.toLowerCase().includes(kwLower);
-      const expanded = hasLongContent && containsKeyword;
+      const matchCount = kw ? this.countKeywordOccurrences(content, kw) : 0;
+      const hasMatch = matchCount > 0;
+      const matchLabel = hasMatch ? this._t('search.matchCount', { n: String(matchCount) }) : '';
+      const expanded = false;
       const expandClass = expanded ? ' toc-content-expanded' : '';
       const expandAria = expanded ? 'true' : 'false';
       const expandText = expanded ? this._t('toc.collapse') : this._t('toc.expand');
       const expandIcon = expanded ? this.getIcon('chevronUp') : this.getIcon('chevronDown');
 
-      return `<li class="toc-item" data-role="${roleAttr}" data-message-id="${item.messageId}" data-expanded="${expanded}">
+      return `<li class="toc-item${hasMatch ? ' has-match-badge' : ''}" data-role="${roleAttr}" data-message-id="${item.messageId}" data-expanded="${expanded}">
         <button type="button" class="export-select-dot" data-scope="toc" data-type="message" data-id="${item.messageId}" aria-label="${this._t('export.select')}"></button>
         <div class="toc-item-main">
           <div class="toc-index" title="${roleLabel}">#${num}</div>
@@ -2147,21 +2269,37 @@ async applySavedWidth() {
           </div>
         </div>
         <div class="toc-item-actions">
+          ${hasLongContent ? `<button type="button" class="toc-action-btn toc-collapse-btn" title="${this._t('toc.collapse')}" data-action="expand">${this.getIcon('chevronUp')}</button>` : ''}
           <button type="button" class="toc-action-btn" title="${this._t('toc.searchInMessage')}" data-action="search">${this.getIcon('search')}</button>
           <button type="button" class="toc-action-btn" title="${this._t('toc.copy')}" data-action="copy">${this.getIcon('copy')}</button>
           <button type="button" class="toc-action-btn toc-action-fav" title="${this._t('toc.favorite')}" data-action="favorite" data-fav="${isFav ? '1' : '0'}">${isFav ? this.getIcon('star') : this.getIcon('starOutline')}</button>
         </div>
+        ${hasMatch ? `<span class="toc-match-badge">${this.escapeHtml(matchLabel)}</span>` : ''}
       </li>`;
     }).join('');
     tocList.querySelectorAll('.toc-item').forEach((li) => {
       const messageId = li.getAttribute('data-message-id');
       const msg = this.messages.find((m) => m.id === messageId);
       const content = (msg && msg.content) || '';
+      li.addEventListener('click', (e) => {
+        if (this.exportState.active && this.exportState.scope === 'toc') {
+          if (e.target.closest('.toc-action-btn') || e.target.closest('.toc-expand-text-btn')) return;
+          const dot = li.querySelector('.export-select-dot');
+          if (dot) this.toggleExportSelectionFromDot(dot);
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      });
       const mainClickArea = li.querySelector('.toc-item-main');
       if (mainClickArea) {
         mainClickArea.addEventListener('click', (e) => {
           // 如果点击的是按钮，不触发跳转
           if (e.target.closest('.toc-expand-text-btn')) return;
+          if (this.exportState.active && this.exportState.scope === 'toc') {
+            const dot = li.querySelector('.export-select-dot');
+            if (dot) this.toggleExportSelectionFromDot(dot);
+            return;
+          }
           window.tocManager.jumpToMessage(messageId);
         });
         mainClickArea.style.cursor = 'pointer';
@@ -2206,8 +2344,19 @@ async applySavedWidth() {
     }
     const label = isFiltered ? this._t('toc.summary.filtered') : this._t('toc.summary.total');
     const itemsLabel = this._t('toc.summary.items');
-    summaryEl.innerHTML = `<span class="toc-summary-left">${label} ${total} ${itemsLabel}</span><span class="toc-summary-right">${this._t('role.user')} ${userCount} · ${this._t('role.assistant')} ${aiCount}</span>`;
-    summaryEl.style.display = 'grid';
+    const platformName = 'ChatGPT';
+    const platformIcon = 'https://chatgpt.com/favicon.ico';
+    summaryEl.innerHTML = `
+      <div class="toc-summary-left">
+        <span>${label} ${total} ${itemsLabel}</span>
+        <span class="toc-summary-meta">${this._t('role.user')} ${userCount} · ${this._t('role.assistant')} ${aiCount}</span>
+      </div>
+      <div class="toc-summary-platform">
+        <img src="${platformIcon}" alt="" class="toc-summary-platform-icon" />
+        <span class="toc-summary-platform-name">${platformName}</span>
+      </div>
+    `;
+    summaryEl.style.display = 'flex';
   }
 
   findPreviewBreakpoint(content) {
@@ -2253,6 +2402,20 @@ async applySavedWidth() {
     }
     
     return breakpoint;
+  }
+
+  countKeywordOccurrences(text, keyword) {
+    if (!text || !keyword) return 0;
+    const lowerText = text.toLowerCase();
+    const lowerKw = keyword.toLowerCase();
+    if (!lowerKw) return 0;
+    let count = 0;
+    let idx = 0;
+    while ((idx = lowerText.indexOf(lowerKw, idx)) !== -1) {
+      count += 1;
+      idx += lowerKw.length;
+    }
+    return count;
   }
 
   async toggleTocFavorite(messageId) {
@@ -2373,6 +2536,11 @@ async applySavedWidth() {
 
   resolveMessageElement(messageId) {
     if (!messageId) return null;
+    if (messageId.startsWith('hist_msg_') || messageId.startsWith('proj_msg_')) {
+      const item = this.shadowRoot.querySelector(`.toc-item[data-message-id="${messageId}"]`);
+      if (!item) return null;
+      return item.querySelector('.toc-content-full') || item.querySelector('.toc-content-wrapper') || item;
+    }
     const el = (window.tocManager && window.tocManager.messageIdToElement && window.tocManager.messageIdToElement[messageId]) || (this.messages.find((m) => m.id === messageId) || {}).element;
     return el && el.isConnected ? el : null;
   }
@@ -2395,7 +2563,7 @@ async applySavedWidth() {
     root.setAttribute('role', 'search');
     root.setAttribute('aria-label', this._t('msgSearch.ariaLabel'));
     root.innerHTML = '<span class="toc-msg-search-float-icon toc-msg-search-float-icon-svg" aria-hidden="true">' + this.getIcon('search') + '</span><input type="text" class="toc-msg-search-float-input" placeholder="' + this._t('msgSearch.placeholder') + '"><button type="button" class="toc-msg-search-float-close" title="' + this._t('action.close') + '">' + this.getIcon('close') + '</button>';
-    const panel = this.shadowRoot.querySelector('[data-panel="toc"]');
+    const panel = tocItem.closest('.tab-panel') || this.shadowRoot.querySelector('[data-panel="toc"]');
     const nextItem = tocItem.nextElementSibling && tocItem.nextElementSibling.classList.contains('toc-item') ? tocItem.nextElementSibling : null;
     if (panel && nextItem) {
       const panelRect = panel.getBoundingClientRect();
@@ -2455,6 +2623,39 @@ async applySavedWidth() {
     this.msgSearchFloatRoot = null;
     this.currentMsgSearchElement = null;
     this.currentMsgSearchMessageId = null;
+  }
+
+  getMsgSearchExpectedTab(messageId) {
+    if (!messageId) return null;
+    if (messageId.startsWith('hist_msg_')) return 'conversations';
+    if (messageId.startsWith('proj_msg_')) return 'projects';
+    return 'toc';
+  }
+
+  stashMsgSearchOverlayForNextTab(nextTab) {
+    if (!this.msgSearchFloatRoot || !this.currentMsgSearchMessageId) return;
+    const expected = this.getMsgSearchExpectedTab(this.currentMsgSearchMessageId);
+    if (expected && expected === nextTab) return;
+    const input = this.msgSearchFloatRoot.querySelector('.toc-msg-search-float-input');
+    this.msgSearchPersist = {
+      messageId: this.currentMsgSearchMessageId,
+      keyword: (input && input.value) ? input.value : ''
+    };
+    this.closeMsgSearchOverlay();
+  }
+
+  restoreMsgSearchOverlayForTab(tabName) {
+    if (!this.msgSearchPersist || !this.msgSearchPersist.messageId) return;
+    const expected = this.getMsgSearchExpectedTab(this.msgSearchPersist.messageId);
+    if (expected && expected !== tabName) return;
+    this.openMsgSearchOverlay(this.msgSearchPersist.messageId);
+    const input = this.msgSearchFloatRoot?.querySelector('.toc-msg-search-float-input');
+    if (!input) return;
+    input.value = this.msgSearchPersist.keyword || '';
+    if (input.value.trim()) {
+      input.dispatchEvent(new Event('input'));
+    }
+    this.msgSearchPersist = null;
   }
 
   async copyMessageWithFormat(messageId, msg) {
@@ -3318,7 +3519,7 @@ async applySavedWidth() {
             <div class="conv-card-actions">
               <button type="button" class="conv-card-action" data-action="open" title="${this._t('conv.openInNewTab')}">${this.getIcon('external')}</button>
               <button type="button" class="conv-card-action" data-action="add-to-project" title="${this._t('filter.addToProject')}">${this.getIcon('folderAdd')}</button>
-              <button type="button" class="conv-card-action" data-action="delete" title="${this._t('conv.delete')}">🗑</button>
+              <button type="button" class="conv-card-action conv-card-action--delete" data-action="delete" title="${this._t('conv.delete')}">${this.getIcon('trash')}</button>
             </div>
           </div>
           <div class="conv-card-snippet">${snippetHtml}</div>
@@ -3337,15 +3538,20 @@ async applySavedWidth() {
 
         // 点击卡片 -> 显示详情（点击标题区域不进入，留作双击修改标题）
         card.addEventListener('click', (e) => {
-          if (e.target.closest('.export-select-dot')) return;
           if (e.target.closest('.conv-card-action')) return;
           if (e.target.closest('.conv-card-title')) return;
+          if (this.exportState.active && this.exportState.scope === 'history') {
+            const dot = card.querySelector('.export-select-dot');
+            if (dot) this.toggleExportSelectionFromDot(dot);
+            return;
+          }
           this.renderConversationDetailInToc(convId);
         });
 
         // 双击标题修改
         card.querySelector('.conv-card-title')?.addEventListener('dblclick', (e) => {
           e.stopPropagation();
+          if (this.exportState.active && this.exportState.scope === 'history') return;
           this.editConversationTitle(convId, card);
         });
         // 操作按钮
@@ -3436,6 +3642,7 @@ async applySavedWidth() {
     }
 
     btnBack.onclick = () => this.renderConversationsList();
+    this.restoreMsgSearchOverlayForTab('conversations');
   }
 
   /**
@@ -3521,14 +3728,16 @@ async applySavedWidth() {
       const msgId = `hist_msg_${index}`;
       const favKey = `msg_${index}`;
       const isFav = favIds.has(favKey);
-      const containsKeyword = kw && content.toLowerCase().includes(kwLower);
-      const expanded = hasLongContent && containsKeyword;
+      const matchCount = kw ? this.countKeywordOccurrences(content, kw) : 0;
+      const hasMatch = matchCount > 0;
+      const matchLabel = hasMatch ? this._t('search.matchCount', { n: String(matchCount) }) : '';
+      const expanded = false;
       const expandClass = expanded ? ' toc-content-expanded' : '';
       const expandAria = expanded ? 'true' : 'false';
       const expandText = expanded ? this._t('toc.collapse') : this._t('toc.expand');
       const expandIcon = expanded ? this.getIcon('chevronUp') : this.getIcon('chevronDown');
 
-      return '<li class="toc-item" data-role="' + roleAttr + '" data-message-id="' + msgId + '" data-expanded="' + expanded + '" data-hist-index="' + index + '">' +
+      return '<li class="toc-item' + (hasMatch ? ' has-match-badge' : '') + '" data-role="' + roleAttr + '" data-message-id="' + msgId + '" data-expanded="' + expanded + '" data-hist-index="' + index + '">' +
         '<div class="toc-item-main">' +
           '<div class="toc-index" title="' + this.escapeHtml(roleLabel) + '">#' + num + '</div>' +
           '<div class="toc-meta"><span class="toc-role-icon" aria-hidden="true">' + roleIcon + '</span>' + this.escapeHtml(roleLabel) + '</div>' +
@@ -3537,10 +3746,11 @@ async applySavedWidth() {
           '</div>' +
         '</div>' +
         '<div class="toc-item-actions">' +
-          '<button type="button" class="toc-action-btn" title="' + this._t('toc.searchInMessage') + '" data-action="search">' + this.getIcon('search') + '</button>' +
+          (hasLongContent ? '<button type="button" class="toc-action-btn toc-collapse-btn" title="' + this._t('toc.collapse') + '" data-action="expand">' + this.getIcon('chevronUp') + '</button>' : '') +
           '<button type="button" class="toc-action-btn" title="' + this._t('toc.copy') + '" data-action="copy" data-content="' + this.escapeHtml(content) + '">' + this.getIcon('copy') + '</button>' +
           '<button type="button" class="toc-action-btn toc-action-fav" title="' + this._t('toc.favorite') + '" data-action="favorite" data-fav="' + (isFav ? '1' : '0') + '">' + (isFav ? this.getIcon('star') : this.getIcon('starOutline')) + '</button>' +
         '</div>' +
+        (hasMatch ? '<span class="toc-match-badge">' + this.escapeHtml(matchLabel) + '</span>' : '') +
       '</li>';
     }).join('') + '</ul>';
 
@@ -3554,9 +3764,6 @@ async applySavedWidth() {
           const action = btn.getAttribute('data-action');
           if (action === 'expand') {
             this.toggleHistoryTocItemExpand(li);
-          } else if (action === 'search') {
-            const detailSearchEl = this.shadowRoot.getElementById('conv-detail-search-input');
-            if (detailSearchEl) detailSearchEl.focus();
           } else if (action === 'copy') {
             const content = btn.getAttribute('data-content');
             this.copyTextToClipboard(content);
@@ -3797,8 +4004,7 @@ async applySavedWidth() {
         const safeContent = this.escapeHtml(content);
         const favKey = `msg_${index}`;
         const isFav = favIds.has(favKey);
-        const containsKeyword = kw && content.toLowerCase().includes(kwLower);
-        const expanded = hasLongContent && containsKeyword;
+        const expanded = false;
         const expandClass = expanded ? ' toc-content-expanded' : '';
         const expandAria = expanded ? 'true' : 'false';
         const expandText = expanded ? this._t('toc.collapse') : this._t('toc.expand');
@@ -3825,7 +4031,6 @@ async applySavedWidth() {
               </div>
             </div>
             <div class="toc-item-actions">
-              <button type="button" class="toc-action-btn" title="${this.escapeHtml(this._t('toc.searchInMessage'))}" data-action="search">${this.getIcon('search')}</button>
               <button type="button" class="toc-action-btn" title="${this.escapeHtml(this._t('toc.copy'))}" data-action="copy" data-content="${safeContent}">${this.getIcon('copy')}</button>
               <button type="button" class="toc-action-btn toc-action-fav" title="${this.escapeHtml(this._t('toc.favorite'))}" data-action="favorite" data-fav="${isFav ? '1' : '0'}">${isFav ? this.getIcon('star') : this.getIcon('starOutline')}</button>
             </div>
@@ -3838,12 +4043,9 @@ async applySavedWidth() {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const action = btn.getAttribute('data-action');
-            if (action === 'expand') {
-              this.toggleHistoryTocItemExpand(li);
-            } else if (action === 'search') {
-              const detailSearchEl = containerElement.closest('.project-conv-detail-view')?.querySelector('.project-conv-detail-search-input');
-              if (detailSearchEl) detailSearchEl.focus();
-            } else if (action === 'copy') {
+          if (action === 'expand') {
+            this.toggleHistoryTocItemExpand(li);
+          } else if (action === 'copy') {
               const content = btn.getAttribute('data-content') || '';
               this.copyTextToClipboard(content);
             } else if (action === 'favorite' && projIndex != null) {
@@ -3859,6 +4061,7 @@ async applySavedWidth() {
       if (kw && containerElement.querySelector('.search-keyword-highlight')) {
         containerElement.querySelector('.search-keyword-highlight').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
+      this.restoreMsgSearchOverlayForTab('projects');
     } catch (e) {
       containerElement.innerHTML = '<div class="empty-state">' + this._t('empty.loadFailed') + '</div>';
       this.log('renderProjectConversationMessages error:', e);
@@ -4173,6 +4376,7 @@ async applySavedWidth() {
                     <div class="conv-card-actions">
                       <button type="button" class="conv-card-action" data-action="open" title="${this.escapeHtml(this._t('conv.openInNewTab'))}">${this.getIcon('external')}</button>
                       ${projectType === 'my' ? `<button type="button" class="conv-card-action" data-action="move" data-conv-id="${this.escapeHtml(item.id)}" title="${this.escapeHtml(this._t('action.move'))}">${this.getIcon('move')}</button>` : ''}
+                      ${projectType === 'my' ? `<button type="button" class="conv-card-action conv-card-action--delete" data-action="remove-from-project" data-conv-id="${this.escapeHtml(item.id)}" title="${this.escapeHtml(this._t('conv.removeFromProject'))}">${this.getIcon('trash')}</button>` : ''}
                     </div>
                   </div>
                   <div class="conv-card-snippet">${snippetHtml}</div>
@@ -4290,6 +4494,11 @@ async applySavedWidth() {
 
       header.addEventListener('click', (e) => {
         if (e.target.closest('.project-item-header-actions')) return;
+        if (this.exportState.active && this.exportState.scope === 'projects') {
+          if (e.target.closest('.export-select-dot')) return;
+          item.classList.toggle('expanded');
+          return;
+        }
         item.classList.toggle('expanded');
       });
 
@@ -4332,6 +4541,11 @@ async applySavedWidth() {
             if (e.target.closest('.export-select-dot')) return;
             if (e.target.closest('.conv-card-actions')) return;
             if (e.target.closest('.conv-card-title')) return;
+            if (this.exportState.active && this.exportState.scope === 'projects') {
+              const dot = card.querySelector('.export-select-dot');
+              if (dot) this.toggleExportSelectionFromDot(dot);
+              return;
+            }
             const convId = card.getAttribute('data-conversation-id');
             if (!convId) return;
             const titleEl = detailView.querySelector('.project-conv-detail-title');
@@ -4432,28 +4646,40 @@ async applySavedWidth() {
           overlay.className = 'dialog-overlay';
           const dialog = document.createElement('div');
           dialog.className = 'dialog';
+          const hasOtherProjects = others.length > 0;
           dialog.innerHTML = `
             <h3 class="dialog-title">移动到项目</h3>
-            <select class="dialog-input" id="move-project-select">
-              <option value="__remove__">移出项目（不移到其他项目）</option>
-              ${others.map(([id, p]) => `<option value="${id}">${this.escapeHtml(p.name)}</option>`).join('')}
+            <select class="dialog-input" id="move-project-select" ${!hasOtherProjects ? 'disabled' : ''}>
+              ${hasOtherProjects ? others.map(([id, p]) => `<option value="${id}">${this.escapeHtml(p.name)}</option>`).join('') : `<option value="">暂无其他项目</option>`}
             </select>
             <div class="dialog-buttons">
               <button class="btn btn-secondary" id="move-cancel">取消</button>
-              <button class="btn btn-primary" id="move-confirm">确定</button>
+              <button class="btn btn-primary" id="move-confirm" ${!hasOtherProjects ? 'disabled' : ''}>确定</button>
             </div>`;
           overlay.appendChild(dialog);
           (this.container || this.shadowRoot).appendChild(overlay);
           dialog.querySelector('#move-cancel').addEventListener('click', () => overlay.remove());
           dialog.querySelector('#move-confirm').addEventListener('click', async () => {
             const targetId = dialog.querySelector('#move-project-select').value;
+            if (!targetId) return;
             await window.projectManager.removeFromMyProject(convId, key);
-            if (targetId !== '__remove__') {
-              await window.projectManager.addToMyProject(convId, targetId);
-            }
+            await window.projectManager.addToMyProject(convId, targetId);
             overlay.remove();
             this.renderProjects();
           });
+        });
+      });
+
+      // 删除/移出项目按钮
+      item.querySelectorAll('.conv-card-action[data-action="remove-from-project"]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const convId = btn.getAttribute('data-conv-id');
+          if (!convId || type !== 'my') return;
+          const ok = await this.showConfirmDialog(this._t('confirm.title'), this._t('dialog.confirmRemoveFromProject'));
+          if (!ok) return;
+          await window.projectManager.removeFromMyProject(convId, key);
+          this.renderProjects();
         });
       });
 
