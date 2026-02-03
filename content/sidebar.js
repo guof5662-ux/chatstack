@@ -338,21 +338,25 @@ class SidebarUI {
               <ul class="conversations-list" id="conversations-list"></ul>
             </div>
             <div id="conversation-detail-container" style="display: none;">
-              <div class="conv-detail-toolbar">
-                <button type="button" class="btn btn-conv-back-icon" id="btn-conv-back" data-i18n-title="action.backToList" data-i18n-aria-label="action.backToList" title="返回列表" aria-label="返回列表">${this.getIcon('back')}</button>
-                <div class="toc-filters conv-detail-filters" id="conv-detail-filters">
-                <button type="button" class="toc-filter-btn active" data-filter-role="all"><span data-i18n="filter.all">全部</span></button>
-                <button type="button" class="toc-filter-btn" data-filter-role="user"><span data-i18n="filter.user">用户</span></button>
-                <button type="button" class="toc-filter-btn" data-filter-role="assistant"><span data-i18n="filter.ai">AI</span></button>
-                <button type="button" class="toc-filter-btn" data-filter-favorite="true">${this.getIcon('star')} <span data-i18n="filter.favorite">收藏</span></button>
-                <button type="button" class="toc-filter-btn toc-add-to-project-btn" id="conv-detail-add-to-project" data-i18n-title="filter.addToProject" title="添加到项目">${this.getIcon('folderAdd')} <span data-i18n="filter.addToProject">添加到项目</span></button>
+              <div class="conv-detail-top">
+                <div class="conv-detail-toolbar">
+                  <button type="button" class="btn btn-conv-back-icon" id="btn-conv-back" data-i18n-title="action.backToList" data-i18n-aria-label="action.backToList" title="返回列表" aria-label="返回列表">${this.getIcon('back')}</button>
+                  <div class="toc-filters conv-detail-filters" id="conv-detail-filters">
+                  <button type="button" class="toc-filter-btn active" data-filter-role="all"><span data-i18n="filter.all">全部</span></button>
+                  <button type="button" class="toc-filter-btn" data-filter-role="user"><span data-i18n="filter.user">用户</span></button>
+                  <button type="button" class="toc-filter-btn" data-filter-role="assistant"><span data-i18n="filter.ai">AI</span></button>
+                  <button type="button" class="toc-filter-btn" data-filter-favorite="true">${this.getIcon('star')} <span data-i18n="filter.favorite">收藏</span></button>
+                  <button type="button" class="toc-filter-btn toc-add-to-project-btn" id="conv-detail-add-to-project" data-i18n-title="filter.addToProject" title="添加到项目">${this.getIcon('folderAdd')} <span data-i18n="filter.addToProject">添加到项目</span></button>
+                  </div>
                 </div>
+                <div class="search-box conv-detail-search-wrap">
+                  <input type="text" class="search-input" data-i18n-placeholder="filter.search.currentConv" placeholder="搜索当前对话内容..." id="conv-detail-search-input" aria-label="搜索当前对话内容">
+                </div>
+                <div id="conv-detail-header"></div>
               </div>
-              <div class="search-box conv-detail-search-wrap">
-                <input type="text" class="search-input" data-i18n-placeholder="filter.search.currentConv" placeholder="搜索当前对话内容..." id="conv-detail-search-input" aria-label="搜索当前对话内容">
+              <div class="conv-detail-scroll">
+                <div id="conv-detail-messages"></div>
               </div>
-              <div id="conv-detail-header"></div>
-              <div id="conv-detail-messages"></div>
               <button type="button" class="btn btn-primary btn-small" id="btn-open-conv" style="margin-top: 8px;" data-i18n="action.openInChatGPT">在 ChatGPT 中打开</button>
             </div>
           </div>
@@ -3599,7 +3603,7 @@ async applySavedWidth() {
 
     this.viewingConversationId = conversationId;
     listContainer.style.display = 'none';
-    detailContainer.style.display = 'block';
+    detailContainer.style.display = 'flex';
 
     const listSearchWrapEl = this.shadowRoot.getElementById('conversations-search-and-filter-wrap');
     const convSearchInputEl = this.shadowRoot.getElementById('conversations-search-input');
