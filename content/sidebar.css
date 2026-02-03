@@ -515,10 +515,25 @@
 #conversation-detail-container {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* 固定顶部区域 - 返回按钮、筛选、搜索框、标题 */
+.conv-detail-top {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+/* 可滚动消息区域 */
+.conv-detail-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  padding-top: 8px;
   padding-bottom: 8px;
+  padding-right: 12px;
 }
 
 /* 项目面板：整体可滚动 */
@@ -608,6 +623,18 @@
   background: var(--export-red-bg-hover);
   border-color: var(--export-red-border-hover);
   color: var(--export-red-hover);
+}
+
+.sidebar-container.dark .search-export-btn {
+  background: rgba(244, 63, 94, 0.12);
+  border-color: rgba(244, 63, 94, 0.5);
+  color: #be123c;
+}
+
+.sidebar-container.dark .search-export-btn:hover {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.7);
+  color: #9f1239;
 }
 
 .search-filter-btn .sidebar-icon {
@@ -1244,15 +1271,15 @@
 }
 
 .export-bar .btn-primary {
-  background: var(--accent-bg);
-  border: 1px solid var(--accent);
-  color: var(--accent);
+  background: var(--export-red-bg);
+  border: 1px solid var(--export-red-border);
+  color: var(--export-red);
 }
 
 .export-bar .btn-primary:hover {
-  background: var(--accent-bg-strong);
-  border-color: var(--accent-dark);
-  color: var(--accent-dark);
+  background: var(--export-red-bg-hover);
+  border-color: var(--export-red-border-hover);
+  color: var(--export-red-hover);
 }
 
 .export-formats {
@@ -1383,6 +1410,7 @@
 
 .export-actions .export-select-all-btn.active {
   background: var(--accent-bg);
+  border: 1px solid var(--accent);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -2441,7 +2469,8 @@
 .project-section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 8px;
   cursor: pointer;
   user-select: none;
   margin-bottom: 12px;
@@ -2497,6 +2526,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-right: auto;
 }
 
 .project-section-icon {
@@ -2673,7 +2703,7 @@
 .sidebar-content::-webkit-scrollbar,
 .toc-view-scroll::-webkit-scrollbar,
 #conversations-list-container::-webkit-scrollbar,
-#conversation-detail-container::-webkit-scrollbar,
+.conv-detail-scroll::-webkit-scrollbar,
 .tab-panel[data-panel="projects"]::-webkit-scrollbar {
   width: 4px;
 }
@@ -2681,7 +2711,7 @@
 .sidebar-content::-webkit-scrollbar-track,
 .toc-view-scroll::-webkit-scrollbar-track,
 #conversations-list-container::-webkit-scrollbar-track,
-#conversation-detail-container::-webkit-scrollbar-track,
+.conv-detail-scroll::-webkit-scrollbar-track,
 .tab-panel[data-panel="projects"]::-webkit-scrollbar-track {
   background: transparent;
   margin: 8px 0;
@@ -2691,7 +2721,7 @@
 .sidebar-content::-webkit-scrollbar-thumb,
 .toc-view-scroll::-webkit-scrollbar-thumb,
 #conversations-list-container::-webkit-scrollbar-thumb,
-#conversation-detail-container::-webkit-scrollbar-thumb,
+.conv-detail-scroll::-webkit-scrollbar-thumb,
 .tab-panel[data-panel="projects"]::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.06);
   border-radius: 2px;
@@ -2701,7 +2731,7 @@
 .sidebar-content::-webkit-scrollbar-thumb:hover,
 .toc-view-scroll::-webkit-scrollbar-thumb:hover,
 #conversations-list-container::-webkit-scrollbar-thumb:hover,
-#conversation-detail-container::-webkit-scrollbar-thumb:hover,
+.conv-detail-scroll::-webkit-scrollbar-thumb:hover,
 .tab-panel[data-panel="projects"]::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.12);
 }
@@ -2709,7 +2739,7 @@
 .dark .sidebar-content::-webkit-scrollbar-thumb,
 .dark .toc-view-scroll::-webkit-scrollbar-thumb,
 .dark #conversations-list-container::-webkit-scrollbar-thumb,
-.dark #conversation-detail-container::-webkit-scrollbar-thumb,
+.dark .conv-detail-scroll::-webkit-scrollbar-thumb,
 .dark .tab-panel[data-panel="projects"]::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.06);
 }
@@ -2717,7 +2747,7 @@
 .dark .sidebar-content::-webkit-scrollbar-thumb:hover,
 .dark .toc-view-scroll::-webkit-scrollbar-thumb:hover,
 .dark #conversations-list-container::-webkit-scrollbar-thumb:hover,
-.dark #conversation-detail-container::-webkit-scrollbar-thumb:hover,
+.dark .conv-detail-scroll::-webkit-scrollbar-thumb:hover,
 .dark .tab-panel[data-panel="projects"]::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.14);
 }
@@ -3275,8 +3305,8 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: calc(100vh - 280px);
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .conv-detail-toc-list .toc-item {
@@ -3308,6 +3338,18 @@
 
 #conv-detail-messages {
   margin-top: 8px;
+}
+
+#conversation-detail-container {
+  display: flex;
+  flex-direction: column;
+}
+
+#btn-open-conv {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 8px;
+  margin-bottom: 4px;
 }
 
 /* ============================================
