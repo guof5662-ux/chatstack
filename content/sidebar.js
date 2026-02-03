@@ -413,12 +413,12 @@ class SidebarUI {
             </div>
           </div>
           ${this.getExportBarHTML('projects')}
-          <div class="project-section">
-            <div class="project-section-header" data-section="chatgpt">
-              <h3 class="project-section-title"><img src="https://chatgpt.com/favicon.ico" alt="" class="project-section-icon"> ChatGPT Projects (Auto)</h3>
+          <div class="project-section" id="auto-projects-section">
+            <div class="project-section-header" data-section="auto">
+              <h3 class="project-section-title" id="auto-projects-title">🤖 Auto Projects</h3>
               <span class="project-section-toggle" aria-hidden="true">${this.getIcon('chevronDown')}</span>
             </div>
-            <ul class="project-list" id="chatgpt-projects-list"></ul>
+            <ul class="project-list" id="auto-projects-list"></ul>
           </div>
 
           <div class="project-section">
@@ -1368,8 +1368,8 @@ async applySavedWidth() {
         this.log('Auto-save:', isChecked);
 
         // 如果重新开启，立即重新解析当前页并更新侧边栏，避免需要手动刷新
-        if (isChecked && window.chatgptAdapter && typeof window.chatgptAdapter.updateMessages === 'function') {
-          window.chatgptAdapter.updateMessages(true); // forceNotify，确保回调触发
+        if (isChecked && window.platformAdapter && typeof window.platformAdapter.updateMessages === 'function') {
+          window.platformAdapter.updateMessages(true); // forceNotify，确保回调触发
         }
       } catch (error) {
         console.error('[SidebarUI] Error updating autoSave config:', error);
@@ -2005,7 +2005,7 @@ async applySavedWidth() {
     const s = this.projectsViewState;
     if (!s || s.level !== 'conversation' || !s.conversationId || !s.projectType || !s.projectKey) return;
 
-    const chatgptList = this.shadowRoot.getElementById('chatgpt-projects-list');
+    const chatgptList = this.shadowRoot.getElementById('auto-projects-list');
     const myList = this.shadowRoot.getElementById('my-projects-list');
     const containers = [chatgptList, myList].filter(Boolean);
     let item = null;
@@ -2096,7 +2096,7 @@ async applySavedWidth() {
    */
   async updateMessages(messages) {
     this.messages = messages;
-    this.conversationId = window.chatgptAdapter.getCurrentConversationId();
+    this.conversationId = window.platformAdapter ? window.platformAdapter.getCurrentConversationId() : null;
 
     // 获取配置
     const config = await window.storageManager.getConfig();
@@ -2179,7 +2179,7 @@ async applySavedWidth() {
     if (!this.conversationId || !this.messages || this.messages.length === 0) return;
     try {
       const firstUserContent = (this.messages.find(m => m.role === 'user') || {}).content || '';
-      const pageTitle = window.chatgptAdapter && window.chatgptAdapter.getConversationTitleFromPage && window.chatgptAdapter.getConversationTitleFromPage();
+      const pageTitle = window.platformAdapter && window.platformAdapter.getConversationTitleFromPage && window.platformAdapter.getConversationTitleFromPage();
       const title = (pageTitle && pageTitle.trim()) ? pageTitle.trim() : (window.tocManager ? window.tocManager.generateTitle(firstUserContent) : this._t('conv.defaultTitle'));
       const snippet = firstUserContent.replace(/\s+/g, ' ').trim().slice(0, 80);
       const messageCount = this.messages.length;
@@ -2348,8 +2348,8 @@ async applySavedWidth() {
     }
     const label = isFiltered ? this._t('toc.summary.filtered') : this._t('toc.summary.total');
     const itemsLabel = this._t('toc.summary.items');
-    const platformName = 'ChatGPT';
-    const platformIcon = 'https://chatgpt.com/favicon.ico';
+    const platformName = window.platformAdapter ? window.platformAdapter.getPlatformName() : 'Unknown';
+    const platformIcon = window.platformAdapter ? window.platformAdapter.getPlatformIcon() : '';
     summaryEl.innerHTML = `
       <div class="toc-summary-left">
         <span>${label} ${total} ${itemsLabel}</span>
@@ -4241,14 +4241,20 @@ async applySavedWidth() {
   }
 
   /**
-   * 更新 ChatGPT 项目映射（按 slug 存，重命名只更新显示名）
+   * 更新平台项目映射（按 platform:slug 存，重命名只更新显示名）
    */
-  async updateChatGPTProjectMapping() {
+  async updatePlatformProjectMapping() {
     if (!this.conversationId) return;
-    const slug = window.chatgptAdapter.getChatGPTProjectSlug && window.chatgptAdapter.getChatGPTProjectSlug();
-    const name = window.chatgptAdapter.getChatGPTProjectName();
-    await window.projectManager.mapToChatGPTProject(this.conversationId, slug, name);
-    this.log('ChatGPT project mapping updated:', slug ? `${slug} (${name})` : 'none');
+    const platform = window.platformAdapter ? window.platformAdapter.getPlatformName() : 'Unknown';
+    const slug = window.platformAdapter && window.platformAdapter.getProjectSlug ? window.platformAdapter.getProjectSlug() : null;
+    const name = window.platformAdapter && window.platformAdapter.getProjectName ? window.platformAdapter.getProjectName() : null;
+    await window.projectManager.mapToAutoProject(this.conversationId, platform, slug, name);
+    this.log(`${platform} project mapping updated:`, slug ? `${slug} (${name})` : 'none');
+  }
+
+  // 兼容旧方法名
+  async updateChatGPTProjectMapping() {
+    return this.updatePlatformProjectMapping();
   }
 
   /**
@@ -4274,11 +4280,16 @@ async applySavedWidth() {
   /**
    * 若仍为同一对话，延迟后再执行一次项目映射并刷新项目列表（应对切到新项目对话时 DOM 尚未渲染完成）
    */
-  async runUpdateChatGPTProjectMappingIfSameConversation() {
-    const currentId = window.chatgptAdapter.getCurrentConversationId();
+  async runUpdatePlatformProjectMappingIfSameConversation() {
+    const currentId = window.platformAdapter ? window.platformAdapter.getCurrentConversationId() : null;
     if (this.conversationId !== currentId) return;
-    await this.updateChatGPTProjectMapping();
+    await this.updatePlatformProjectMapping();
     if (this.currentTab === 'projects') await this.renderProjects();
+  }
+
+  // 兼容旧方法名
+  async runUpdateChatGPTProjectMappingIfSameConversation() {
+    return this.runUpdatePlatformProjectMappingIfSameConversation();
   }
 
   /**
@@ -4450,7 +4461,7 @@ async applySavedWidth() {
         </li>`;
     };
 
-    const chatgptList = this.shadowRoot.getElementById('chatgpt-projects-list');
+    const chatgptList = this.shadowRoot.getElementById('auto-projects-list');
     if (Object.keys(chatgptProjects).length === 0) {
       chatgptList.innerHTML = '<div class="empty-state"><div class="empty-state-text">' + this._t('empty.noChatGPTProjects') + '</div></div>';
     } else {
@@ -4743,7 +4754,7 @@ async applySavedWidth() {
             if (!raw) return;
             const { conversationId: convId, sourceProjectKey: sourceKey } = JSON.parse(raw);
             if (!convId || sourceKey === key) return;
-            const chatgptList = this.shadowRoot.getElementById('chatgpt-projects-list');
+            const chatgptList = this.shadowRoot.getElementById('auto-projects-list');
             const myList = this.shadowRoot.getElementById('my-projects-list');
             const expandedKeys = new Set();
             [chatgptList, myList].forEach((c) => {
