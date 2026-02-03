@@ -62,8 +62,16 @@ class I18nManager {
 
         // 项目
         'project.create': '新建项目',
-        'project.myProjects': 'My Projects',
-        'project.chatgptProjects': 'ChatGPT Projects',
+        'project.myProjects': '我创建的项目',
+        'project.myProjectsHint': '可包含任意平台的对话，由你整理',
+        'project.chatgptProjects': 'ChatGPT 中的项目',
+        'project.platformProjects': '同步自平台',
+        'project.platformProjectsHint': '来自 ChatGPT、Gemini 等站点的文件夹，仅展示',
+        'project.projectsInPlatform': '{platform} 中的项目',
+
+        // 历史 · ChatGPT 区分
+        'history.chatgpt.projects': '项目',
+        'history.chatgpt.yourChats': '你的聊天',
 
         // 设置页面
         'settings.autoSave.title': '自动保存',
@@ -86,6 +94,7 @@ class I18nManager {
 
         // 操作
         'action.openInChatGPT': '在 ChatGPT 中打开',
+        'action.openInPlatform': '在 {platform} 中打开',
         'action.backToList': '返回列表',
         'action.dragToResize': '拖拽调整宽度',
         'action.close': '关闭',
@@ -264,7 +273,15 @@ class I18nManager {
         // Projects
         'project.create': 'New Project',
         'project.myProjects': 'My Projects',
+        'project.myProjectsHint': 'Organize conversations from any platform',
         'project.chatgptProjects': 'ChatGPT Projects',
+        'project.platformProjects': 'Synced from platforms',
+        'project.platformProjectsHint': 'Folders from ChatGPT, Gemini, etc. — display only',
+        'project.projectsInPlatform': 'Projects in {platform}',
+
+        // History · ChatGPT sections
+        'history.chatgpt.projects': 'Projects',
+        'history.chatgpt.yourChats': 'Your Chats',
 
         // Settings
         'settings.autoSave.title': 'Auto Save',
@@ -287,6 +304,7 @@ class I18nManager {
 
         // Actions
         'action.openInChatGPT': 'Open in ChatGPT',
+        'action.openInPlatform': 'Open in {platform}',
         'action.backToList': 'Back to list',
         'action.dragToResize': 'Drag to resize',
         'action.close': 'Close',

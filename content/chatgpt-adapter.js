@@ -29,10 +29,16 @@ class ChatGPTAdapter extends BasePlatformAdapter {
 
   /**
    * 检测是否在 ChatGPT 对话页面
+   * 使用正则校验：/c/id 或 /g/xxx/c/id
    * @returns {boolean}
    */
   isConversationPage() {
-    return window.location.href.includes('/c/');
+    const pathname = window.location.pathname || '';
+    const validPatterns = [
+      /^\/c\/[^/]+$/,           // /c/conversation_id
+      /^\/g\/[^/]+\/c\/[^/]+$/  // /g/gpt_id/c/conversation_id
+    ];
+    return validPatterns.some(p => p.test(pathname));
   }
 
   /**
@@ -62,13 +68,47 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         return messages;
       }
 
-      // 优先：ChatGPT 官方对话回合节点，识别最准
+      const container = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
+      const articleContainers = container.querySelectorAll('article');
+      const hasEdit = Array.from(articleContainers).some(el => this.isInEditMode(el));
+      if (hasEdit) {
+        this.log('User is editing, skip parsing');
+        return messages;
+      }
+
+      const userMessages = container.querySelectorAll('div[data-message-author-role="user"]');
+      const aiMessages = container.querySelectorAll('div[data-message-author-role="assistant"]');
+      if (userMessages.length > 0 || aiMessages.length > 0) {
+        const allElements = [];
+        userMessages.forEach(el => allElements.push({ element: el, role: 'user' }));
+        aiMessages.forEach(el => allElements.push({ element: el, role: 'assistant' }));
+        allElements.sort((a, b) => {
+          const pos = a.element.compareDocumentPosition(b.element);
+          if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+          if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+          return 0;
+        });
+        let index = 0;
+        allElements.forEach(({ element, role }) => {
+          const content = this.extractMessageContent(element, role);
+          if (!content || this.isNoiseContent(content)) return;
+          const messageId = `msg_${index}`;
+          element.setAttribute('data-ext-message-id', messageId);
+          messages.push({ id: messageId, role, content: content.trim(), element });
+          index++;
+        });
+        if (messages.length > 0) {
+          this.log('Parsed messages (data-message-author-role):', messages.length);
+          return messages;
+        }
+      }
+
       const turnElements = document.querySelectorAll('[data-testid^="conversation-turn-"]');
       if (turnElements.length > 0) {
         turnElements.forEach((el, index) => {
           const roleEl = el.querySelector('[data-message-author-role="user"]') ? 'user' : el.querySelector('[data-message-author-role="assistant"]') ? 'assistant' : null;
           if (!roleEl) return;
-          const content = this.extractMessageContent(el);
+          const content = this.extractMessageContent(el, roleEl);
           if (!content || this.isNoiseContent(content)) return;
           const messageId = `msg_${index}`;
           el.setAttribute('data-ext-message-id', messageId);
@@ -78,9 +118,8 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         return messages;
       }
 
-      // 备用：按 main 内带角色标识的块遍历，并严格过滤
-      const allGroups = document.querySelectorAll('main [class*="group"], main .text-base');
       let messageIndex = 0;
+      const allGroups = document.querySelectorAll('main [class*="group"], main .text-base');
       allGroups.forEach((element) => {
         const hasUser = element.querySelector('[data-message-author-role="user"]');
         const hasAssistant = element.querySelector('[data-message-author-role="assistant"]');
@@ -93,7 +132,7 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         }
         if (!role) return;
 
-        const content = this.extractMessageContent(element);
+        const content = this.extractMessageContent(element, role);
         if (!content || this.isNoiseContent(content)) return;
 
         const messageId = `msg_${messageIndex}`;
@@ -108,6 +147,15 @@ class ChatGPTAdapter extends BasePlatformAdapter {
 
     this.log('Parsed messages:', messages.length);
     return messages;
+  }
+
+  /**
+   * 检查是否处于编辑状态（避免在用户输入时解析）
+   */
+  isInEditMode(element) {
+    if (!element) return false;
+    const activeTextarea = element.querySelector('textarea:focus');
+    return !!activeTextarea;
   }
 
   // ===== ChatGPT 特有方法 =====
@@ -257,11 +305,45 @@ class ChatGPTAdapter extends BasePlatformAdapter {
   }
 
   /**
+   * 提取格式化内容（用于 .markdown.prose 等）
+   */
+  extractFormattedContent(element) {
+    if (!element) return '';
+    const textContent = element.innerText || element.textContent || '';
+    return textContent
+      .split('\n')
+      .map(line => line.trim())
+      .filter((line, idx, array) => {
+        if (line) return true;
+        const prevLine = array[idx - 1];
+        const nextLine = array[idx + 1];
+        return prevLine && nextLine && prevLine.trim() && nextLine.trim();
+      })
+      .join('\n')
+      .trim();
+  }
+
+  /**
    * 提取消息的完整文本内容
    * @param {HTMLElement} element
+   * @param {string} [role] - 可选，'user' 时优先 .whitespace-pre-wrap，'assistant' 时优先 .markdown.prose
    * @returns {string}
    */
-  extractMessageContent(element) {
+  extractMessageContent(element, role) {
+    if (role === 'user') {
+      const userText = element.querySelector('.whitespace-pre-wrap');
+      if (userText && (userText.innerText || '').trim()) {
+        const t = (userText.innerText || '').trim();
+        return this._normalizeExtractedText(t);
+      }
+    }
+    if (role === 'assistant') {
+      const aiMarkdown = element.querySelector('.markdown.prose');
+      if (aiMarkdown) {
+        const t = this.extractFormattedContent(aiMarkdown);
+        if (t) return this._normalizeExtractedText(t);
+      }
+    }
     const parts = [];
     const markdownBlocks = element.querySelectorAll('[class*="markdown"]');
     if (markdownBlocks.length > 0) {
@@ -276,10 +358,13 @@ class ChatGPTAdapter extends BasePlatformAdapter {
       const t = (fallback.textContent || fallback.innerText || '').trim();
       if (t) parts.push(t);
     }
-    let text = parts.join('\n\n');
-    text = text.replace(/[ \t]+/g, ' ');
-    text = text.replace(/\n\s*\n\s*\n+/g, '\n\n');
-    return text.trim();
+    return this._normalizeExtractedText(parts.join('\n\n'));
+  }
+
+  _normalizeExtractedText(text) {
+    if (!text) return '';
+    let t = text.replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n');
+    return t.trim();
   }
 }
 

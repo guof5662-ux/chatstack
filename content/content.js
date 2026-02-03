@@ -15,6 +15,7 @@ class SidebarExtension {
   constructor() {
     this.DEBUG = false;
     this.initialized = false;
+    this.storageSyncInitialized = false;
   }
 
   log(...args) {
@@ -38,6 +39,7 @@ class SidebarExtension {
 
       // 初始化各管理器
       await this.initManagers();
+      this.initStorageSync();
 
       // 注入侧边栏
       window.sidebarUI.inject();
@@ -124,6 +126,55 @@ class SidebarExtension {
     // 阅读进度管理器
     await window.progressManager.init();
     this.log('ProgressManager initialized');
+  }
+
+  /**
+   * 监听 storage 变化，同步跨页面项目数据
+   */
+  initStorageSync() {
+    if (this.storageSyncInitialized) return;
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.onChanged) return;
+
+    chrome.storage.onChanged.addListener(async (changes, areaName) => {
+      if (areaName !== 'local') return;
+      if (!changes) return;
+      if (!window.storageManager || !window.projectManager) return;
+      try {
+        const sidebar = window.sidebarUI;
+        const hasProjects = !!changes.projects;
+        const hasConversationList = !!changes.conversationList;
+        const convKeys = Object.keys(changes).filter((k) => k.startsWith('conv_'));
+
+        if (hasProjects) {
+          const projects = await window.storageManager.getAllProjects();
+          window.projectManager.projects = projects;
+        }
+
+        if (!sidebar) return;
+
+        const isProjectsTab = sidebar.currentTab === 'projects';
+        const isHistoryTab = sidebar.currentTab === 'conversations';
+        const isHistoryDetail = isHistoryTab && !!sidebar.viewingConversationId;
+
+        if (isProjectsTab && (hasProjects || hasConversationList || convKeys.length)) {
+          await sidebar.renderProjects();
+          await sidebar.restoreProjectsViewState();
+          return;
+        }
+
+        if (isHistoryTab && (hasProjects || hasConversationList || convKeys.length)) {
+          if (isHistoryDetail) {
+            await sidebar.renderConversationDetailInToc(sidebar.viewingConversationId);
+          } else {
+            await sidebar.renderConversationsList();
+          }
+        }
+      } catch (e) {
+        console.warn('[Sidebar Extension] Storage sync error:', e);
+      }
+    });
+
+    this.storageSyncInitialized = true;
   }
 
   /**
