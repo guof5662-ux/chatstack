@@ -56,6 +56,11 @@ chatgpt-sidebar-extension/
 └── README.md                  # 本文件
 ```
 
+更多文档见 **`docs/`** 目录：
+- **PLUGIN_EVALUATION.md** — 插件评价体系（功能、代码、体验、性能、安全、兼容、文档）
+- **PLUGIN_STATUS_REPORT.md** — 当前状态报告与七维度结论
+- **CHECKLIST.md** — 发版前可勾选清单
+
 ### 数据结构
 
 ```javascript

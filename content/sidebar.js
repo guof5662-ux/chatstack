@@ -515,7 +515,6 @@ class SidebarUI {
             <!-- 版本信息 -->
             <div class="settings-footer">
               <p>ChatGPT Sidebar Navigator v1.0.0</p>
-              <p><span data-i18n="settings.footer.debugMode">开发模式</span>: <span id="debug-status">启用</span></p>
             </div>
           </div>
         </div>
@@ -530,19 +529,6 @@ class SidebarUI {
     this.createFloatButton();
     this.bindEvents();
     this.initSettings();
-  }
-
-  getLayoutRoot() {
-    if (typeof document === 'undefined' || !document.body) return null;
-    const main = document.querySelector('main');
-    if (main) return main;
-    const next = document.getElementById('__next');
-    if (next) return next;
-    const root = document.getElementById('root');
-    if (root) return root;
-    const first = document.body.firstElementChild;
-    if (first && first.nodeType === Node.ELEMENT_NODE) return first;
-    return document.body;
   }
 
   getLayoutRoots() {
@@ -665,8 +651,6 @@ async applySavedWidth() {
       this.log('persistSidebarOpen error:', e);
     }
   }
-
-  isUserClosed() { return this.userClosed; }
 
   toggle() {
     if (!this.container) {
@@ -1423,14 +1407,6 @@ async applySavedWidth() {
         themeSelect.value = config.theme || 'auto';
       }
       this.applyTheme(config.theme || 'auto');
-
-      // 设置调试模式状态
-      const debugStatus = this.shadowRoot.getElementById('debug-status');
-      if (debugStatus && window.i18nManager) {
-        debugStatus.textContent = config.debugMode
-          ? window.i18nManager.t('settings.footer.enabled')
-          : window.i18nManager.t('settings.footer.disabled');
-      }
 
       this.log('Settings initialized');
     } catch (error) {
