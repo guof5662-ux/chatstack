@@ -2212,6 +2212,7 @@ async applySavedWidth() {
   }
 
   renderTOC(searchKeyword) {
+    if (!this.shadowRoot) return;
     const tocList = this.shadowRoot.getElementById('toc-list');
     let tocItems = window.tocManager.buildTOC(this.messages);
     if (tocItems.length === 0) {
