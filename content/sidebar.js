@@ -3538,13 +3538,14 @@ async applySavedWidth() {
 
         // 点击卡片 -> 显示详情（点击标题区域不进入，留作双击修改标题）
         card.addEventListener('click', (e) => {
-          if (e.target.closest('.conv-card-action')) return;
-          if (e.target.closest('.conv-card-title')) return;
           if (this.exportState.active && this.exportState.scope === 'history') {
+            if (e.target.closest('.export-select-dot')) return;
             const dot = card.querySelector('.export-select-dot');
             if (dot) this.toggleExportSelectionFromDot(dot);
             return;
           }
+          if (e.target.closest('.conv-card-action')) return;
+          if (e.target.closest('.conv-card-title')) return;
           this.renderConversationDetailInToc(convId);
         });
 
@@ -3558,6 +3559,11 @@ async applySavedWidth() {
         card.querySelectorAll('.conv-card-action').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (this.exportState.active && this.exportState.scope === 'history') {
+              const dot = card.querySelector('.export-select-dot');
+              if (dot) this.toggleExportSelectionFromDot(dot);
+              return;
+            }
             const action = btn.getAttribute('data-action');
             if (action === 'open') {
               window.open(window.location.origin + '/c/' + convId, '_blank');
@@ -4150,6 +4156,7 @@ async applySavedWidth() {
 
   async editConversationTitle(conversationId, cardEl) {
     try {
+      if (this.exportState && this.exportState.active) return;
       const conv = await window.storageManager.getConversation(conversationId);
       const currentTitle = conv.title || this._t('conv.defaultTitle');
 
@@ -4538,14 +4545,15 @@ async applySavedWidth() {
       if (listView && detailView) {
         item.querySelectorAll('.conv-card').forEach((card) => {
           card.addEventListener('click', async (e) => {
-            if (e.target.closest('.export-select-dot')) return;
-            if (e.target.closest('.conv-card-actions')) return;
-            if (e.target.closest('.conv-card-title')) return;
             if (this.exportState.active && this.exportState.scope === 'projects') {
+              if (e.target.closest('.export-select-dot')) return;
               const dot = card.querySelector('.export-select-dot');
               if (dot) this.toggleExportSelectionFromDot(dot);
               return;
             }
+            if (e.target.closest('.export-select-dot')) return;
+            if (e.target.closest('.conv-card-actions')) return;
+            if (e.target.closest('.conv-card-title')) return;
             const convId = card.getAttribute('data-conversation-id');
             if (!convId) return;
             const titleEl = detailView.querySelector('.project-conv-detail-title');
@@ -4630,6 +4638,12 @@ async applySavedWidth() {
       item.querySelectorAll('.conv-card-action[data-action="open"], .project-conv-action[data-action="open"]').forEach((el) => {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
+          if (this.exportState.active && this.exportState.scope === 'projects') {
+            const card = el.closest('.conv-card');
+            const dot = card?.querySelector('.export-select-dot');
+            if (dot) this.toggleExportSelectionFromDot(dot);
+            return;
+          }
           const convId = el.getAttribute('data-conv-id') || el.closest('.conv-card')?.getAttribute('data-conversation-id') || el.closest('.project-conversation-item')?.getAttribute('data-conversation-id');
           if (convId) window.open(window.location.origin + '/c/' + convId, '_blank');
         });
@@ -4638,6 +4652,12 @@ async applySavedWidth() {
       item.querySelectorAll('.conv-card-action[data-action="move"], .project-conv-action[data-action="move"]').forEach((btn) => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
+          if (this.exportState.active && this.exportState.scope === 'projects') {
+            const card = btn.closest('.conv-card');
+            const dot = card?.querySelector('.export-select-dot');
+            if (dot) this.toggleExportSelectionFromDot(dot);
+            return;
+          }
           const convId = btn.getAttribute('data-conv-id');
           if (!convId || type !== 'my') return;
           const myProjects = window.projectManager.getMyProjects();
@@ -4674,6 +4694,12 @@ async applySavedWidth() {
       item.querySelectorAll('.conv-card-action[data-action="remove-from-project"]').forEach((btn) => {
         btn.addEventListener('click', async (e) => {
           e.stopPropagation();
+          if (this.exportState.active && this.exportState.scope === 'projects') {
+            const card = btn.closest('.conv-card');
+            const dot = card?.querySelector('.export-select-dot');
+            if (dot) this.toggleExportSelectionFromDot(dot);
+            return;
+          }
           const convId = btn.getAttribute('data-conv-id');
           if (!convId || type !== 'my') return;
           const ok = await this.showConfirmDialog(this._t('confirm.title'), this._t('dialog.confirmRemoveFromProject'));
