@@ -1,9 +1,17 @@
 /**
  * Content Script 主入口
  * 协调各模块，初始化扩展
+ * 支持多平台：ChatGPT、Gemini 等
  */
 
-class ChatGPTSidebarExtension {
+// 支持的平台域名
+const SUPPORTED_HOSTNAMES = [
+  'chatgpt.com',
+  'chat.openai.com',
+  'gemini.google.com'
+];
+
+class SidebarExtension {
   constructor() {
     this.DEBUG = false;
     this.initialized = false;
@@ -11,7 +19,8 @@ class ChatGPTSidebarExtension {
 
   log(...args) {
     if (this.DEBUG) {
-      console.log('[ChatGPT Sidebar Extension]', ...args);
+      const platform = window.platformAdapter ? window.platformAdapter.getPlatformName() : 'Sidebar';
+      console.log(`[${platform} Sidebar Extension]`, ...args);
     }
   }
 
@@ -33,13 +42,17 @@ class ChatGPTSidebarExtension {
       // 注入侧边栏
       window.sidebarUI.inject();
 
-      // 初始化 ChatGPT 适配器
-      window.chatgptAdapter.init();
+      // 初始化平台适配器
+      if (window.platformAdapter) {
+        window.platformAdapter.init();
 
-      // 开始监听页面变化
-      window.chatgptAdapter.startObserving((messages) => {
-        this.handleMessagesUpdate(messages);
-      });
+        // 开始监听页面变化
+        window.platformAdapter.startObserving((messages) => {
+          this.handleMessagesUpdate(messages);
+        });
+      } else {
+        console.warn('[Sidebar Extension] No platform adapter available');
+      }
 
       this.initialized = true;
       this.log('Extension initialized successfully ✓');
@@ -50,17 +63,28 @@ class ChatGPTSidebarExtension {
   }
 
   /**
+   * 检查是否在会话页面
+   */
+  isOnConversationPage() {
+    if (window.platformAdapter && typeof window.platformAdapter.isConversationPage === 'function') {
+      return window.platformAdapter.isConversationPage();
+    }
+    // 备用检查（适配器未加载时）
+    return window.location.href.includes('/c/') || window.location.href.includes('/app/');
+  }
+
+  /**
    * 等待页面准备就绪
    */
   async waitForPageReady() {
     // 检查是否在会话页面
-    if (!window.location.href.includes('/c/')) {
+    if (!this.isOnConversationPage()) {
       this.log('Not on a conversation page, waiting...');
 
       // 监听 URL 变化
       return new Promise((resolve) => {
         const checkUrl = setInterval(() => {
-          if (window.location.href.includes('/c/')) {
+          if (this.isOnConversationPage()) {
             clearInterval(checkUrl);
             this.log('Conversation page detected');
             resolve();
@@ -131,12 +155,13 @@ class ChatGPTSidebarExtension {
 (function() {
   'use strict';
 
-  console.log('ChatGPT Sidebar Extension Content Script Loaded');
+  console.log('Sidebar Extension Content Script Loaded');
 
-  // 检查是否在 ChatGPT 页面
-  if (!window.location.hostname.includes('openai.com') &&
-      !window.location.hostname.includes('chatgpt.com')) {
-    console.log('Not on ChatGPT, extension will not activate');
+  // 检查是否在支持的平台页面
+  const hostname = window.location.hostname;
+  const isSupported = SUPPORTED_HOSTNAMES.some(h => hostname.includes(h) || h.includes(hostname));
+  if (!isSupported) {
+    console.log('Not on a supported platform, extension will not activate');
     return;
   }
 
@@ -256,7 +281,7 @@ class ChatGPTSidebarExtension {
   }
 
   // 创建扩展实例
-  const extension = new ChatGPTSidebarExtension();
+  const extension = new SidebarExtension();
 
   function showPageToast(message, duration = 3000) {
     const id = 'chatgpt-sidebar-page-toast';
@@ -293,7 +318,7 @@ class ChatGPTSidebarExtension {
               sendResponse({ ok: false });
               return;
             }
-            if (!window.location.href.includes('/c/')) {
+            if (!extension.isOnConversationPage()) {
               const text = window.i18nManager ? window.i18nManager.t('toast.openConversationFirst') : '请先打开或创建一个对话';
               showPageToast(text);
               sendResponse({ ok: false });
@@ -331,8 +356,7 @@ class ChatGPTSidebarExtension {
   }
 
   function tryInitOnConversationPage() {
-    const currentUrl = location.href;
-    if (!currentUrl.includes('/c/')) return;
+    if (!extension.isOnConversationPage()) return;
     if (extension.initialized) return;
     extension.init();
   }
@@ -353,8 +377,8 @@ class ChatGPTSidebarExtension {
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
     lastUrl = currentUrl;
-    console.log('[ChatGPT Sidebar] URL changed:', currentUrl);
-    if (currentUrl.includes('/c/')) {
+    console.log('[Sidebar Extension] URL changed:', currentUrl);
+    if (extension.isOnConversationPage()) {
       if (!extension.initialized) {
         setTimeout(() => extension.init(), 300);
       }

@@ -33,6 +33,7 @@
         "core/project-manager.js",
         "core/bookmark-manager.js",
         "core/progress-manager.js",
+        "content/platform-adapter.js",
         "content/chatgpt-adapter.js",
         "content/sidebar.js",
         "content/content.js"
