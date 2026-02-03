@@ -8,16 +8,15 @@
 ## ✅ 代码级验证结果
 
 ### 1. 语法检查
-- **8/8** 个 JS 文件通过 Node 语法检查（无语法错误）
-- 涉及文件：`storage.js`, `toc-manager.js`, `project-manager.js`, `bookmark-manager.js`, `progress-manager.js`, `chatgpt-adapter.js`, `sidebar.js`, `content.js`
+- **7/7** 个 core/content JS 文件通过语法检查（无语法错误）
+- 涉及文件：`storage.js`, `toc-manager.js`, `project-manager.js`, `chatgpt-adapter.js`, `sidebar.js`, `content.js`
 
 ### 2. 依赖与加载顺序
-- `manifest.json` 中脚本顺序正确：storage → toc/project/bookmark/progress → chatgpt-adapter → sidebar → content
-- 全局单例均正确挂载：`window.storageManager`, `window.tocManager`, `window.projectManager`, `window.bookmarkManager`, `window.progressManager`, `window.chatgptAdapter`, `window.sidebarUI`
+- `manifest.json` 中脚本顺序正确：storage → toc/project → chatgpt-adapter → sidebar → content
+- 全局单例均正确挂载：`window.storageManager`, `window.tocManager`, `window.projectManager`, `window.chatgptAdapter`, `window.sidebarUI`
 
 ### 3. 配置与存储
 - `StorageManager.getConfig()` / `saveConfig()` 存在，且对无效结果有防御式处理
-- 侧边栏“自动恢复阅读进度”开关已正确绑定到 `storageManager.getConfig/saveConfig`
 
 ### 4. 已修复的问题
 - **搜索跳转**：此前点击「助手消息」的搜索结果不会滚动（TOC 只存了用户消息）。已在 `toc-manager.js` 中维护 `messageIdToElement` 映射，`jumpToMessage(messageId)` 现在对所有消息（含助手）均可正确跳转并高亮。
@@ -30,7 +29,7 @@
 
 ### 基础
 - [ ] 右侧出现侧边栏（约 320px 宽）
-- [ ] 四个 Tab 可见：目录、项目、书签、设置
+- [ ] 三个 Tab 可见：当前对话、历史、项目
 - [ ] 无样式错位、无 Console 报错
 
 ### 目录 (TOC)
@@ -49,18 +48,8 @@
 - [ ] 点击「+ 新建项目」、输入名称后，项目出现在「My Projects」
 - [ ] 点击「添加到项目」、选择项目后，当前会话被加入该项目
 
-### 书签
-- [ ] 在「书签」Tab 点击「+ 添加书签」，最后一条用户消息被添加为书签
-- [ ] 点击书签能跳转到对应消息
-- [ ] 对同一条消息再次添加书签时有「已添加书签」类提示
-
-### 阅读进度
-- [ ] 在「设置」中开启「自动恢复阅读进度」
-- [ ] 滚动到会话中间，等待几秒后刷新页面，能自动滚回上次位置
-- [ ] 「手动恢复进度」按钮能跳转到上次阅读位置
-
 ### 数据持久化
-- [ ] 创建项目、添加书签后，关闭浏览器再打开 ChatGPT，数据仍在
+- [ ] 创建项目后，关闭浏览器再打开 ChatGPT，数据仍在
 
 ---
 

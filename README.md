@@ -1,6 +1,6 @@
 # ChatGPT Sidebar Navigator
 
-一个为 ChatGPT (chat.openai.com) 打造的智能侧边栏扩展，提供会话导航、双层项目管理和阅读进度等功能。
+一个为 ChatGPT (chat.openai.com) 打造的智能侧边栏扩展，提供会话导航和双层项目管理等功能。
 
 ## ✨ 功能特性
 
@@ -25,11 +25,6 @@
 - 创建、重命名、删除项目
 - 一个会话可加入多个项目
 - 引用关系，删除项目不影响会话
-
-### 📖 阅读进度
-- 自动记录最后阅读位置
-- 重进会话自动恢复
-- 可手动控制开关
 
 ## 🏗️ 技术架构
 
@@ -57,8 +52,7 @@ chatgpt-sidebar-extension/
 ├── core/                      # 核心管理模块
 │   ├── storage.js            # 存储管理
 │   ├── toc-manager.js        # TOC 管理
-│   ├── project-manager.js    # 项目管理
-│   └── progress-manager.js   # 阅读进度管理
+│   └── project-manager.js    # 项目管理
 └── README.md                  # 本文件
 ```
 
@@ -69,7 +63,6 @@ chatgpt-sidebar-extension/
 {
   id: "conversation_id",
   messages: [],
-  lastRead: { messageId, scrollTop, timestamp },
   chatgptProject: "项目名或 null",
   myProjects: ["project_id_1", "project_id_2"],
   createdAt: timestamp,
@@ -165,15 +158,6 @@ chatgpt-sidebar-extension/
 - [ ] 点击「添加到项目」按钮
 - [ ] 选择刚创建的项目
 - [ ] 项目会话数 +1
-
-#### 5. 阅读进度功能
-- [ ] 切换到「设置」Tab
-- [ ] 阅读进度默认自动启用（无需手动开关）
-- [ ] 滚动到会话中间位置
-- [ ] 等待 2-3 秒（自动记录进度）
-- [ ] 刷新页面或切换到其他会话再返回
-- [ ] 页面自动滚动到上次阅读位置
-- [ ] 点击「手动恢复进度」按钮，跳转到上次位置
 
 ### ✅ 高级测试
 

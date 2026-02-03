@@ -18,17 +18,28 @@ chatgpt-sidebar-extension/
 │   │                                # - 初始化管理器
 │   │                                # - 启动页面监听
 │   │
-│   ├── chatgpt-adapter.js           # 🔌 ChatGPT 页面适配器
-│   │                                # - 解析 conversation ID
-│   │                                # - 提取消息列表
-│   │                                # - MutationObserver + debounce
-│   │                                # - 获取 ChatGPT Project 名称
+│   ├── platform-adapter.js          # 🔌 平台适配器基类
+│   │                                # - 定义各平台适配器接口
 │   │
-│   ├── sidebar.js                   # 🎨 侧边栏 UI 管理器
-│   │                                # - Shadow DOM 注入
-│   │                                # - Tab 切换逻辑
-│   │                                # - 渲染 TOC/Projects/Bookmarks
-│   │                                # - 事件绑定与处理
+│   ├── chatgpt-adapter.js           # 🔌 ChatGPT 页面适配器
+│   ├── gemini-adapter.js            # 🔌 Gemini 页面适配器
+│   │
+│   ├── html-to-markdown.js          # 📄 HTML→Markdown/Text 转换（纯逻辑）
+│   │                                # - 供 TOC 与导出使用
+│   │
+│   ├── sidebar-export.js            # 📤 侧边栏导出模块
+│   │                                # - 导出模式、勾选、构建文件、下载
+│   │
+│   ├── sidebar-toc.js               # 📑 TOC 与消息内搜索模块
+│   │                                # - 消息 HTML 提取、高亮、浮层搜索
+│   │
+│   ├── sidebar-filters.js           # 🔍 筛选与日期选择器模块
+│   │                                # - 日期范围、平台筛选、日期选择器 UI
+│   │
+│   ├── sidebar.js                   # 🎨 侧边栏 UI 编排
+│   │                                # - Shadow DOM 注入、布局、主题
+│   │                                # - Tab 切换、进度、事件委托
+│   │                                # - 编排 export/toc/filters 等子模块
 │   │
 │   └── sidebar.css                  # 💅 侧边栏样式
 │                                    # - Shadow DOM 隔离样式
@@ -53,15 +64,6 @@ chatgpt-sidebar-extension/
 │   │                                # - My Projects 增删改
 │   │                                # - 会话与项目关联
 │   │
-│   ├── bookmark-manager.js          # ⭐ 书签管理器
-│   │                                # - 添加/删除书签
-│   │                                # - 按会话/项目查询
-│   │                                # - 去重检查
-│   │
-│   └── progress-manager.js          # 📖 阅读进度管理器
-│                                    # - 记录最后阅读位置
-│                                    # - 自动恢复进度
-│                                    # - 可见性检测
 │
 ├── README.md                        # 📄 完整使用文档
 │                                    # - 功能介绍
@@ -87,7 +89,7 @@ chatgpt-sidebar-extension/
 
 1. 页面加载
    └─> content.js 初始化
-       ├─> 初始化所有 Manager (storage/toc/project/bookmark/progress)
+       ├─> 初始化所有 Manager (storage/toc/project)
        ├─> chatgpt-adapter 解析页面
        │   └─> MutationObserver 监听 DOM 变化
        └─> sidebar.js 注入侧边栏 (Shadow DOM)
@@ -98,7 +100,6 @@ chatgpt-sidebar-extension/
            └─> sidebar.js 更新 UI
                ├─> tocManager.buildTOC() → 渲染目录
                ├─> projectManager.mapToChatGPTProject() → 自动映射项目
-               └─> progressManager.autoRecordVisibleProgress() → 记录进度
 
 3. 用户交互
    ├─> 点击目录条目
@@ -107,18 +108,14 @@ chatgpt-sidebar-extension/
    ├─> 创建项目
    │   └─> projectManager.createMyProject() → 保存到 storage
    │
-   ├─> 添加书签
-   │   └─> bookmarkManager.addBookmark() → 保存并刷新 UI
    │
    └─> 恢复进度
-       └─> progressManager.restoreProgress() → 滚动到上次位置
 
 4. 数据持久化
    └─> 所有数据通过 storageManager 统一管理
        └─> chrome.storage.local
            ├─> conv_{id}: 会话数据
            ├─> projects: 项目数据
-           ├─> bookmarks: 书签数据
            └─> config: 配置数据
 
 
@@ -143,7 +140,6 @@ chatgpt-sidebar-extension/
 
 2. 性能优化
    → Debounce 延迟可调（chatgpt-adapter.js:12）
-   → 阅读进度记录间隔可调（sidebar.js progressTimer）
 
 3. 数据迁移
    → 第一版使用 chrome.storage.local（限制 10MB）
@@ -178,29 +174,23 @@ chatgpt-sidebar-extension/
       ├─ 会话多对多关联
       └─ 预留拖拽排序结构
 
-✅ D. 书签
-   ├─ 添加/删除书签
-   ├─ 按项目查看
-   └─ 点击跳转定位
-
-✅ E. 阅读进度
-   ├─ 自动记录（2 秒间隔）
-   ├─ 刷新后恢复
-   └─ 手动恢复开关
-
-
 文件大小统计
 ============
 
-manifest.json           ~1 KB
-content/content.js      ~3 KB
+manifest.json              ~1 KB
+content/content.js         ~3 KB
+content/platform-adapter.js ~4 KB
 content/chatgpt-adapter.js  ~9 KB
-content/sidebar.js      ~15 KB
-content/sidebar.css     ~10 KB
-core/storage.js         ~4 KB
-core/toc-manager.js     ~4 KB
-core/project-manager.js ~6 KB
-core/bookmark-manager.js ~3 KB
-core/progress-manager.js ~4 KB
+content/gemini-adapter.js   ~10 KB
+content/html-to-markdown.js ~11 KB
+content/sidebar-export.js   ~17 KB
+content/sidebar-toc.js      ~14 KB
+content/sidebar-filters.js  ~9 KB
+content/sidebar.js          ~140 KB（编排 + 历史/项目视图等）
+content/sidebar.css         ~10 KB
+core/storage.js             ~4 KB
+core/toc-manager.js         ~4 KB
+core/project-manager.js     ~6 KB
+core/i18n.js                ~5 KB
 
-总计: ~60 KB (未压缩)
+总计: ~230 KB (未压缩)。侧边栏逻辑已拆分为 html-to-markdown、sidebar-export、sidebar-toc、sidebar-filters，便于维护与单测。

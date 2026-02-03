@@ -40,14 +40,13 @@ class SidebarUI {
     this.historyExpandedProjects = new Set();
     // 项目页：记录已展开的项目，避免重渲染后自动收回
     this.projectsExpandedItems = new Set();
-    // 仅在同一会话首次加载时恢复阅读进度，避免 AI 回答完成后因消息更新再次执行导致滚回顶部
-    this.progressRestoredForConversationId = null;
-    // 上一轮 updateMessages 的会话 ID，用于区分「刚进入会话」与「同会话内打开侧栏/流式更新」从而避免打开插件时自动上滚
-    this._prevUpdateConversationId = null;
     this.lastNonSettingsTab = 'toc';
     this.msgSearchPersist = null;
     // 导出模式状态
     this.exportState = { active: false, scope: null, selected: new Set(), formats: { json: false, md: false, txt: false }, zip: false };
+    this.exportMod = typeof globalThis.SidebarExport !== 'undefined' ? new globalThis.SidebarExport(this) : null;
+    this.tocMod = typeof globalThis.SidebarTOC !== 'undefined' ? new globalThis.SidebarTOC(this) : null;
+    this.filterMod = typeof globalThis.SidebarFilters !== 'undefined' ? new globalThis.SidebarFilters(this) : null;
   }
 
   log(...args) {
@@ -158,27 +157,7 @@ class SidebarUI {
   }
 
   getExportBarHTML(scope) {
-    const id = `export-bar-${scope}`;
-    const countId = `export-count-${scope}`;
-    return `
-      <div class="export-bar" id="${id}" data-scope="${scope}" style="display: none;">
-        <div class="export-formats">
-          <span class="export-label" data-i18n="export.format">${this._t('export.format')}</span>
-          <label class="export-format"><input type="checkbox" data-format="json"> JSON</label>
-          <label class="export-format"><input type="checkbox" data-format="md"> MD</label>
-          <label class="export-format"><input type="checkbox" data-format="txt"> TXT</label>
-          <label class="export-format export-zip"><input type="checkbox" data-zip> ${this._t('export.zip')}</label>
-          <span class="export-count" id="${countId}">${this._t('export.selected', { n: '0' })}</span>
-        </div>
-        <div class="export-actions">
-          <button type="button" class="btn btn-secondary btn-small export-select-all-btn" data-action="select-all" data-i18n="export.selectAll">${this._t('export.selectAll')}</button>
-          <button type="button" class="btn btn-secondary btn-small" data-action="clear" data-i18n="export.clear">${this._t('export.clear')}</button>
-          <button type="button" class="btn btn-secondary btn-small" data-action="cancel" data-i18n="export.cancel">${this._t('export.cancel')}</button>
-          <button type="button" class="btn btn-primary btn-small" data-action="download" data-i18n="export.download">${this._t('export.download')}</button>
-        </div>
-        <div class="export-hint"></div>
-      </div>
-    `;
+    return this.exportMod ? this.exportMod.getExportBarHTML(scope) : '';
   }
 
   /**
@@ -923,156 +902,15 @@ async applySavedWidth() {
   }
 
   ensureDatePickerPopup() {
-    if (this.datePickerPopup) return;
-    const popup = document.createElement('div');
-    popup.id = 'filter-date-picker-popup';
-    popup.className = 'date-picker-popup';
-    const weekdays = this._t('datePicker.weekdays').split(',');
-    const weekdaysHtml = weekdays.map((d) => `<span>${this.escapeHtml(d)}</span>`).join('');
-    popup.innerHTML = `
-      <div class="date-picker-header">
-        <button type="button" class="date-picker-nav" data-delta="-12" title="${this.escapeHtml(this._t('datePicker.prevYear'))}"><<</button>
-        <button type="button" class="date-picker-nav" data-delta="-1" title="${this.escapeHtml(this._t('datePicker.prevMonth'))}"><</button>
-        <span class="date-picker-title"></span>
-        <button type="button" class="date-picker-nav" data-delta="1" title="${this.escapeHtml(this._t('datePicker.nextMonth'))}">></button>
-        <button type="button" class="date-picker-nav" data-delta="12" title="${this.escapeHtml(this._t('datePicker.nextYear'))}">>></button>
-      </div>
-      <div class="date-picker-weekdays">${weekdaysHtml}</div>
-      <div class="date-picker-grid"></div>
-      <div class="date-picker-footer"><button type="button" class="btn btn-link date-picker-today">${this.escapeHtml(this._t('datePicker.today'))}</button></div>`;
-    popup.style.display = 'none';
-    this.container.appendChild(popup);
-    this.datePickerPopup = popup;
-    this.datePickerCurrentInputId = null;
-    this.datePickerYear = new Date().getFullYear();
-    this.datePickerMonth = new Date().getMonth() + 1;
-
-    popup.querySelectorAll('.date-picker-nav').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const delta = parseInt(btn.getAttribute('data-delta'), 10);
-        if (Math.abs(delta) === 12) {
-          this.datePickerYear += delta;
-        } else {
-          this.datePickerMonth += delta;
-          if (this.datePickerMonth > 12) { this.datePickerMonth = 1; this.datePickerYear++; }
-          if (this.datePickerMonth < 1) { this.datePickerMonth = 12; this.datePickerYear--; }
-        }
-        this.renderDatePickerGrid();
-      });
-    });
-    popup.querySelector('.date-picker-today').addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = this.datePickerCurrentInputId;
-      if (id) {
-        const el = this.shadowRoot.getElementById(id);
-        if (el) {
-          el.value = this.formatDateForInput(Date.now());
-          el.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }
-      this.tocFilterDateRange = 'custom';
-      popup.style.display = 'none';
-    });
-    this.shadowRoot.addEventListener('click', (e) => {
-      if (popup.style.display === 'block' && !popup.contains(e.target) && !e.target.closest('.filter-date-calendar-btn')) {
-        popup.style.display = 'none';
-      }
-    });
+    if (this.filterMod) this.filterMod.ensureDatePickerPopup();
   }
 
   renderDatePickerGrid() {
-    if (!this.datePickerPopup) return;
-    const titleEl = this.datePickerPopup.querySelector('.date-picker-title');
-    const gridEl = this.datePickerPopup.querySelector('.date-picker-grid');
-    if (titleEl) titleEl.textContent = this._t('datePicker.titleFormat', { year: this.datePickerYear, month: this.datePickerMonth });
-    const y = this.datePickerYear;
-    const m = this.datePickerMonth - 1;
-    const first = new Date(y, m, 1);
-    const firstDay = first.getDay();
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
-    const prevMonthDays = new Date(y, m, 0).getDate();
-    const prevMonth1Based = m === 0 ? 12 : m;
-    const prevYear = m === 0 ? y - 1 : y;
-    const cells = [];
-    for (let i = 0; i < firstDay; i++) {
-      const d = prevMonthDays - firstDay + 1 + i;
-      cells.push(`<button type="button" class="date-picker-cell other-month" data-year="${prevYear}" data-month="${prevMonth1Based}" data-day="${d}">${d}</button>`);
-    }
-    for (let d = 1; d <= daysInMonth; d++) {
-      cells.push(`<button type="button" class="date-picker-cell" data-year="${y}" data-month="${m + 1}" data-day="${d}">${d}</button>`);
-    }
-    const total = cells.length;
-    const remainder = total % 7;
-    const nextMonthCount = remainder === 0 ? 0 : 7 - remainder;
-    for (let i = 1; i <= nextMonthCount; i++) {
-      const nextM = m + 2;
-      const nextY = nextM > 12 ? y + 1 : y;
-      const nextMo = nextM > 12 ? 1 : nextM;
-      cells.push(`<button type="button" class="date-picker-cell other-month" data-year="${nextY}" data-month="${nextMo}" data-day="${i}">${i}</button>`);
-    }
-    gridEl.innerHTML = cells.join('');
-    const today = new Date();
-    gridEl.querySelectorAll('.date-picker-cell').forEach((cell) => {
-      const yr = parseInt(cell.getAttribute('data-year'), 10);
-      const mo = parseInt(cell.getAttribute('data-month'), 10);
-      const day = parseInt(cell.getAttribute('data-day'), 10);
-      if (yr === today.getFullYear() && mo === today.getMonth() + 1 && day === today.getDate()) {
-        cell.classList.add('today');
-      }
-      cell.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const inputId = this.datePickerCurrentInputId;
-        if (inputId) {
-          const mm = String(mo).padStart(2, '0');
-          const dd = String(day).padStart(2, '0');
-          const val = `${yr}/${mm}/${dd}`;
-          const el = this.shadowRoot.getElementById(inputId);
-          if (el) {
-            el.value = val;
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }
-        this.tocFilterDateRange = 'custom';
-        this.datePickerPopup.style.display = 'none';
-      });
-    });
+    if (this.filterMod) this.filterMod.renderDatePickerGrid();
   }
 
   openDatePickerForInput(inputId, anchorButton) {
-    this.ensureDatePickerPopup();
-    const inputEl = this.shadowRoot.getElementById(inputId);
-    const popup = this.datePickerPopup;
-    this.datePickerCurrentInputId = inputId;
-    let y = new Date().getFullYear();
-    let m = new Date().getMonth() + 1;
-    if (inputEl && inputEl.value.trim()) {
-      const parsed = this.parseDateInput(inputEl.value);
-      if (parsed) {
-        const d = new Date(parsed);
-        y = d.getFullYear();
-        m = d.getMonth() + 1;
-      }
-    }
-    this.datePickerYear = y;
-    this.datePickerMonth = m;
-    this.renderDatePickerGrid();
-    popup.style.display = 'block';
-    const rect = anchorButton.getBoundingClientRect();
-    const containerRect = this.container.getBoundingClientRect();
-    const gap = 4;
-    let left = rect.left - containerRect.left;
-    let top = rect.bottom - containerRect.top + gap;
-    const popupWidth = popup.offsetWidth;
-    const popupHeight = popup.offsetHeight;
-    const containerWidth = containerRect.width;
-    const containerHeight = containerRect.height;
-    if (left + popupWidth > containerWidth - 8) left = Math.max(8, containerWidth - popupWidth - 8);
-    if (left < 8) left = 8;
-    if (top + popupHeight > containerHeight - 8) top = Math.max(8, containerHeight - popupHeight - 8);
-    if (top < 8) top = 8;
-    popup.style.left = left + 'px';
-    popup.style.top = top + 'px';
+    if (this.filterMod) this.filterMod.openDatePickerForInput(inputId, anchorButton);
   }
 
   /**
@@ -1494,537 +1332,63 @@ async applySavedWidth() {
   }
 
   toggleExportMode(scope) {
-    if (this.exportState.active) {
-      if (this.exportState.scope === scope) {
-        this.exitExportMode();
-        return;
-      }
-      this.exitExportMode();
-    }
-    this.enterExportMode(scope);
+    if (this.exportMod) this.exportMod.toggleExportMode(scope);
   }
 
   enterExportMode(scope) {
-    this.exportState.active = true;
-    this.exportState.scope = scope;
-    this.exportState.selected = new Set();
-    if (this.container) {
-      this.container.classList.add('export-mode');
-      this.container.setAttribute('data-export-scope', scope);
-    }
-    // 关闭可能打开的筛选面板，避免遮挡导出栏
-    if (scope === 'history') {
-      const convFilterPanel = this.shadowRoot.getElementById('conversations-filter-panel');
-      const btnConvFilter = this.shadowRoot.getElementById('btn-conversations-filter');
-      if (convFilterPanel) {
-        convFilterPanel.style.display = 'none';
-        this.conversationsFilterPanelOpen = false;
-      }
-      if (btnConvFilter) {
-        btnConvFilter.classList.toggle('active', this.hasActiveFilter());
-      }
-    } else if (scope === 'projects') {
-      const projFilterPanel = this.shadowRoot.getElementById('projects-filter-panel');
-      const btnProjFilter = this.shadowRoot.getElementById('btn-projects-filter');
-      if (projFilterPanel) {
-        projFilterPanel.style.display = 'none';
-        this.projectsFilterPanelOpen = false;
-      }
-      if (btnProjFilter) {
-        btnProjFilter.classList.toggle('active', this.hasActiveFilter());
-      }
-    }
-    const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
-    if (bar) bar.style.display = 'flex';
-    this.syncExportFormatsToUI();
-    this.updateExportHint();
-    if (scope === 'toc') {
-      this.selectAllInScope(scope);
-    }
-    this.updateExportCount();
+    if (this.exportMod) this.exportMod.enterExportMode(scope);
   }
 
   exitExportMode() {
-    if (this.container) {
-      this.container.classList.remove('export-mode');
-      this.container.removeAttribute('data-export-scope');
-    }
-    if (this.exportState.scope) {
-      const bar = this.shadowRoot.getElementById(`export-bar-${this.exportState.scope}`);
-      if (bar) bar.style.display = 'none';
-    }
-    this.exportState.active = false;
-    this.exportState.scope = null;
-    this.exportState.selected = new Set();
-    this.syncExportSelectionUI();
+    if (this.exportMod) this.exportMod.exitExportMode();
   }
 
   syncExportFormatsToUI() {
-    if (!this.exportState.scope) return;
-    const bar = this.shadowRoot.getElementById(`export-bar-${this.exportState.scope}`);
-    if (!bar) return;
-    bar.querySelectorAll('input[data-format]').forEach((input) => {
-      const fmt = input.getAttribute('data-format');
-      input.checked = !!this.exportState.formats[fmt];
-    });
-    const zipInput = bar.querySelector('input[data-zip]');
-    if (zipInput) zipInput.checked = !!this.exportState.zip;
+    if (this.exportMod) this.exportMod.syncExportFormatsToUI();
   }
 
   updateExportHint() {
-    const scope = this.exportState.scope;
-    if (!scope) return;
-    const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
-    if (!bar) return;
-    const hintEl = bar.querySelector('.export-hint');
-    if (!hintEl) return;
-    let key = 'export.hint.history';
-    if (scope === 'toc') key = 'export.hint.toc';
-    else if (scope === 'projects') key = 'export.hint.projects';
-    hintEl.textContent = this._t(key);
+    if (this.exportMod) this.exportMod.updateExportHint();
   }
 
   updateExportCount() {
-    if (!this.exportState.scope) return;
-    const countEl = this.shadowRoot.getElementById(`export-count-${this.exportState.scope}`);
-    if (countEl) {
-      countEl.textContent = this._t('export.selected', { n: String(this.exportState.selected.size) });
-    }
+    if (this.exportMod) this.exportMod.updateExportCount();
   }
 
   toggleExportSelectionFromDot(dot) {
-    if (!this.exportState.active) return;
-    const scope = dot.getAttribute('data-scope');
-    if (scope !== this.exportState.scope) return;
-    const key = this.getExportKeyFromDot(dot);
-    if (!key) return;
-    if (this.exportState.selected.has(key)) this.exportState.selected.delete(key);
-    else this.exportState.selected.add(key);
-    this.syncExportSelectionUI();
+    if (this.exportMod) this.exportMod.toggleExportSelectionFromDot(dot);
   }
 
   getExportKeyFromDot(dot) {
-    const scope = dot.getAttribute('data-scope');
-    const type = dot.getAttribute('data-type');
-    if (!scope || !type) return null;
-    if (type === 'project') {
-      const pType = dot.getAttribute('data-project-type');
-      const pKey = dot.getAttribute('data-project-key');
-      if (!pType || !pKey) return null;
-      return `${scope}:project:${pType}:${pKey}`;
-    }
-    const id = dot.getAttribute('data-id');
-    if (!id) return null;
-    return `${scope}:${type}:${id}`;
+    return this.exportMod ? this.exportMod.getExportKeyFromDot(dot) : null;
   }
 
   syncExportSelectionUI() {
-    this.shadowRoot.querySelectorAll('.export-select-dot').forEach((dot) => {
-      const key = this.getExportKeyFromDot(dot);
-      const selected = key && this.exportState.selected.has(key);
-      dot.classList.toggle('selected', !!selected);
-      const container = dot.closest('.toc-item, .conv-card, .project-item-header');
-      if (container) {
-        container.classList.toggle('export-selected', !!selected);
-        container.setAttribute('aria-selected', selected ? 'true' : 'false');
-      }
-    });
-    this.updateExportCount();
-    this.updateSelectAllButtonState();
+    if (this.exportMod) this.exportMod.syncExportSelectionUI();
   }
 
   selectAllInScope(scope) {
-    const dots = this.shadowRoot.querySelectorAll(`.export-select-dot[data-scope="${scope}"]`);
-    dots.forEach((dot) => {
-      const key = this.getExportKeyFromDot(dot);
-      if (key) this.exportState.selected.add(key);
-    });
-    this.syncExportSelectionUI();
+    if (this.exportMod) this.exportMod.selectAllInScope(scope);
   }
 
   isAllSelectedInScope(scope) {
-    const dots = this.shadowRoot.querySelectorAll(`.export-select-dot[data-scope="${scope}"]`);
-    if (!dots.length) return false;
-    let selectedCount = 0;
-    dots.forEach((dot) => {
-      const key = this.getExportKeyFromDot(dot);
-      if (key && this.exportState.selected.has(key)) selectedCount += 1;
-    });
-    return selectedCount === dots.length;
+    return this.exportMod ? this.exportMod.isAllSelectedInScope(scope) : false;
   }
 
   updateSelectAllButtonState() {
-    const scope = this.exportState.scope;
-    if (!scope) return;
-    const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
-    if (!bar) return;
-    const btn = bar.querySelector('.export-select-all-btn');
-    if (!btn) return;
-    const isAllSelected = this.isAllSelectedInScope(scope);
-    btn.classList.toggle('active', isAllSelected);
+    if (this.exportMod) this.exportMod.updateSelectAllButtonState();
   }
 
   handleExportBarAction(btn) {
-    if (!this.exportState.active) return;
-    const action = btn.getAttribute('data-action');
-    if (!action) return;
-    if (action === 'cancel') {
-      this.exitExportMode();
-      return;
-    }
-    if (action === 'clear') {
-      this.exportState.selected.clear();
-      this.syncExportSelectionUI();
-      return;
-    }
-    if (action === 'select-all') {
-      const scope = this.exportState.scope;
-      if (!scope) return;
-      if (this.isAllSelectedInScope(scope)) {
-        this.exportState.selected.clear();
-        this.syncExportSelectionUI();
-      } else {
-        this.selectAllInScope(scope);
-      }
-      return;
-    }
-    if (action === 'download') {
-      this.runExportDownload();
-    }
+    if (this.exportMod) this.exportMod.handleExportBarAction(btn);
+  }
+
+  resetExportDownloadButton() {
+    if (this.exportMod) this.exportMod.resetExportDownloadButton();
   }
 
   async runExportDownload() {
-    if (!this.exportState.active || !this.exportState.scope) return;
-    const formats = Object.keys(this.exportState.formats).filter((f) => this.exportState.formats[f]);
-    if (formats.length === 0) {
-      this.showToast(this._t('export.noFormat'));
-      return;
-    }
-    if (this.exportState.selected.size === 0) {
-      this.showToast(this._t('export.noSelection'));
-      return;
-    }
-
-    const files = await this.buildExportFiles(formats);
-    if (!files.length) {
-      this.showToast(this._t('export.noSelection'));
-      return;
-    }
-
-    const shouldZip = this.exportState.zip || files.length > 1;
-    if (shouldZip) {
-      if (typeof window.JSZip === 'undefined') {
-        this.showToast(this._t('export.zipUnavailable'));
-        return;
-      }
-      const zip = new window.JSZip();
-      files.forEach((f) => zip.file(f.name, f.content));
-      const blob = await zip.generateAsync({ type: 'blob' });
-      const zipName = `chatstack_export_${this.formatDateForFileName(Date.now())}.zip`;
-      this.downloadBlob(blob, zipName);
-      this.showToast(this._t('export.done'));
-      this.selectAllInScope(this.exportState.scope);
-      this.resetExportDownloadButton();
-      return;
-    }
-
-    // 多文件且不打包：逐个下载
-    for (const f of files) {
-      const blob = new Blob([f.content], { type: f.mime });
-      this.downloadBlob(blob, f.name);
-    }
-    this.showToast(this._t('export.done'));
-    this.selectAllInScope(this.exportState.scope);
-    this.resetExportDownloadButton();
-  }
-
-  /**
-   * 下载完成后恢复「下载」按钮可点击与样式（失焦、去除 disabled）
-   */
-  resetExportDownloadButton() {
-    if (!this.exportState.scope) return;
-    const bar = this.shadowRoot.getElementById(`export-bar-${this.exportState.scope}`);
-    if (!bar) return;
-    const downloadBtn = bar.querySelector('button[data-action="download"]');
-    if (downloadBtn) {
-      downloadBtn.removeAttribute('disabled');
-      downloadBtn.blur();
-    }
-  }
-
-  async buildExportFiles(formats) {
-    const scope = this.exportState.scope;
-    if (scope === 'toc') {
-      return this.buildTocExportFiles(formats);
-    }
-    if (scope === 'history') {
-      return this.buildHistoryExportFiles(formats);
-    }
-    if (scope === 'projects') {
-      return this.buildProjectsExportFiles(formats);
-    }
-    return [];
-  }
-
-  async buildTocExportFiles(formats) {
-    if (!this.conversationId) return [];
-    const selectedIds = Array.from(this.exportState.selected)
-      .filter((k) => k.startsWith('toc:message:'))
-      .map((k) => k.replace('toc:message:', ''));
-    if (selectedIds.length === 0) return [];
-    const idToIndex = new Map();
-    this.messages.forEach((m, i) => idToIndex.set(m.id, i));
-    const selected = selectedIds
-      .map((id) => {
-        const msg = this.messages.find((m) => m.id === id);
-        if (!msg) return null;
-        const index = (idToIndex.get(id) || 0) + 1;
-        let contentHtml = msg.contentHtml || null;
-        if (!contentHtml && msg.element) {
-          try {
-            contentHtml = this.extractMessageHTMLForDisplay(msg.element);
-          } catch (e) {
-            this.log('buildTocExportFiles contentHtml error:', e);
-          }
-        }
-        return { index, role: msg.role, content: msg.content || '', contentHtml };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.index - b.index);
-    if (!selected.length) return [];
-
-    const conv = await window.storageManager.getConversation(this.conversationId);
-    const title = (conv && conv.title) || this._t('conv.defaultTitle');
-    const base = this.safeFilename(`current_${title}_${this.conversationId.slice(0, 8)}_blocks`);
-    return this.buildMessageFiles(base, title, this.conversationId, selected, formats, undefined, conv);
-  }
-
-  async buildHistoryExportFiles(formats) {
-    const selected = Array.from(this.exportState.selected);
-    const projectKeys = selected.filter((k) => k.startsWith('history:project:'));
-    const convIds = new Set(
-      selected
-        .filter((k) => k.startsWith('history:conversation:'))
-        .map((k) => k.replace('history:conversation:', ''))
-    );
-    const folderMap = new Map();
-    if (projectKeys.length) {
-      const autoProjects = window.projectManager.getAutoProjects();
-      projectKeys.forEach((k) => {
-        const parts = k.split(':');
-        const pType = parts[2];
-        const pKey = parts.slice(3).join(':');
-        if (pType !== 'auto') return;
-        const project = autoProjects[pKey];
-        if (!project) return;
-        const projectName = project.name || pKey;
-        (project.conversations || []).forEach((id) => {
-          convIds.add(id);
-          if (!folderMap.has(id)) folderMap.set(id, projectName);
-        });
-      });
-    }
-    if (!convIds.size) return [];
-    const files = [];
-    for (const id of convIds) {
-      const conv = await window.storageManager.getConversation(id);
-      const title = (conv && conv.title) || this._t('conv.defaultTitle');
-      const messages = (conv.messages || []).map((m, i) => ({
-        index: i + 1,
-        role: m.role,
-        content: m.content || '',
-        contentHtml: m.contentHtml || null
-      }));
-      const base = this.safeFilename(`${title}_${id.slice(0, 8)}`);
-      const folderName = folderMap.get(id);
-      files.push(...this.buildMessageFiles(base, title, id, messages, formats, folderName, conv));
-    }
-    return files;
-  }
-
-  async buildProjectsExportFiles(formats) {
-    const selected = Array.from(this.exportState.selected);
-    const folderKeys = selected.filter((k) => k.startsWith('projects:project:'));
-    const convIds = new Set(selected.filter((k) => k.startsWith('projects:conversation:')).map((k) => k.replace('projects:conversation:', '')));
-    const folderMap = new Map();
-    const chatgptProjects = window.projectManager.getChatGPTProjects();
-    const myProjects = window.projectManager.getMyProjects();
-
-    folderKeys.forEach((k) => {
-      const parts = k.split(':');
-      const pType = parts[2];
-      const pKey = parts.slice(3).join(':');
-      const project = pType === 'chatgpt' ? chatgptProjects[pKey] : myProjects[pKey];
-      if (!project) return;
-      const projectName = project.name || pKey;
-      (project.conversations || []).forEach((id) => {
-        if (!folderMap.has(id)) folderMap.set(id, projectName);
-        convIds.add(id);
-      });
-    });
-
-    const files = [];
-    for (const id of convIds) {
-      const conv = await window.storageManager.getConversation(id);
-      const title = (conv && conv.title) || this._t('conv.defaultTitle');
-      const messages = (conv.messages || []).map((m, i) => ({
-        index: i + 1,
-        role: m.role,
-        content: m.content || '',
-        contentHtml: m.contentHtml || null
-      }));
-      const base = this.safeFilename(`${title}_${id.slice(0, 8)}`);
-      const folder = folderMap.get(id);
-      files.push(...this.buildMessageFiles(base, title, id, messages, formats, folder, conv));
-    }
-    return files;
-  }
-
-  buildMessageFiles(baseName, title, conversationId, messages, formats, folderName, conv) {
-    const files = [];
-    const prefix = folderName ? this.safeFilename(folderName) + '/' : '';
-    const platform = (conv && conv.platform) ? conv.platform : 'ChatGPT';
-    const site = platform;
-    const url = conversationId
-      ? this.getConversationOpenUrl(platform, conversationId, (conv && conv.link) ? conv.link : '')
-      : '';
-    const exportedAt = new Date().toISOString();
-    if (formats.includes('json')) {
-      const data = {
-        id: conversationId,
-        title,
-        site,
-        url,
-        exported: exportedAt,
-        messages: messages.map((m) => ({
-          index: m.index,
-          role: m.role,
-          content: m.content || ''
-        }))
-      };
-      files.push({ name: `${prefix}${baseName}.json`, content: JSON.stringify(data, null, 2), mime: 'application/json' });
-    }
-    if (formats.includes('md')) {
-      const mdHeader = [
-        '# ChatStack Export',
-        '',
-        '## Metadata',
-        '',
-        `- Site: ${site}`,
-        `- URL: ${url}`,
-        `- Exported: ${exportedAt}`,
-        '',
-        '## Messages',
-        ''
-      ];
-      const mdMessages = messages.map((m, idx) => {
-        const body = this.renderMessageContent(m, 'md');
-        const separator = idx === 0 ? '' : '\n\n---\n';
-        return `${separator}### ${m.index}. ${m.role}\n\n${body}`;
-      });
-      const body = mdHeader.concat(mdMessages).join('\n\n');
-      files.push({ name: `${prefix}${baseName}.md`, content: body, mime: 'text/markdown' });
-    }
-    if (formats.includes('txt')) {
-      const txtHeader = [
-        'ChatStack Export',
-        '',
-        'Metadata',
-        `Site: ${site}`,
-        `URL: ${url}`,
-        `Exported: ${exportedAt}`,
-        '',
-        'Messages',
-        ''
-      ];
-      const txtMessages = messages.map((m, idx) => {
-        const body = this.renderMessageContent(m, 'txt').split('\n').map((line) => '  ' + line).join('\n');
-        const separator = idx === 0 ? '' : '\n\n' + '-'.repeat(40) + '\n';
-        return `${separator}${m.index}. ${m.role}\n${body}`;
-      });
-      const body = txtHeader.concat(txtMessages).join('\n\n');
-      files.push({ name: `${prefix}${baseName}.txt`, content: body, mime: 'text/plain' });
-    }
-    return files;
-  }
-
-  /**
-   * 导出前去掉搜索高亮标记，避免导出文件里出现黄色高亮框
-   */
-  stripHighlightMarkupForExport(html) {
-    if (!html || typeof html !== 'string') return html || '';
-    let cleaned = html;
-    
-    // 1. 去除所有 <mark> 标签（不管有没有属性）
-    cleaned = cleaned.replace(/<mark[^>]*>([\s\S]*?)<\/mark>/gi, '$1');
-    
-    // 2. 去除带有 highlight 相关 class 的 span 标签
-    cleaned = cleaned.replace(/<span[^>]*class="[^"]*highlight[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '$1');
-    
-    // 3. 去除带有背景色样式的 span 标签（常见的高亮实现方式）
-    cleaned = cleaned.replace(/<span[^>]*style="[^"]*background[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '$1');
-    
-    // 4. 去除空的 span 标签
-    cleaned = cleaned.replace(/<span[^>]*>\s*<\/span>/gi, '');
-    
-    return cleaned;
-  }
-
-  getMessageHtmlForExport(message) {
-    let html = '';
-    if (message && message.contentHtml && message.contentHtml.trim()) html = message.contentHtml;
-    else if (message && message.element) {
-      try {
-        const extracted = this.extractMessageHTMLForDisplay(message.element);
-        if (extracted && extracted.trim()) html = extracted;
-      } catch (e) {
-        this.log('getMessageHtmlForExport error:', e);
-      }
-    }
-    if (!html) return this.wrapPlainTextAsHtml((message && message.content) || '');
-    return this.stripHighlightMarkupForExport(html);
-  }
-
-  wrapPlainTextAsHtml(text) {
-    const safe = this.escapeHtml((text || '').replace(/\r\n/g, '\n'));
-    const parts = safe.split(/\n{2,}/).map((p) => p.replace(/\n/g, '<br>'));
-    return parts.map((p) => `<p>${p}</p>`).join('');
-  }
-
-  renderMessageContent(message, format) {
-    const html = this.getMessageHtmlForExport(message);
-    if (!html || !html.trim()) return '';
-    if (format === 'md') return this.renderHtmlToMarkdown(html);
-    return this.renderHtmlToText(html);
-  }
-
-  safeFilename(name) {
-    return (name || 'export')
-      .replace(/[\\/:*?"<>|]+/g, '_')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 80) || 'export';
-  }
-
-  formatDateForFileName(ms) {
-    const d = new Date(ms);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${y}${m}${day}_${h}${min}`;
-  }
-
-  downloadBlob(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    if (this.exportMod) await this.exportMod.runExportDownload();
   }
 
   /**
@@ -2194,6 +1558,20 @@ async applySavedWidth() {
     }
 
     await this.renderProjectConversationMessages(s.conversationId, messagesEl, (s.searchKeyword || '').trim() || undefined);
+
+    // 恢复重渲染前的滚动位置，避免用户在对话详情内滑动时被 storage 同步触发重绘后跳回顶部
+    if (this._savedProjectsPanelScrollTop != null) {
+      const projectsPanel = this.shadowRoot?.querySelector('.tab-panel[data-panel="projects"]');
+      if (projectsPanel) {
+        const toRestore = this._savedProjectsPanelScrollTop;
+        this._savedProjectsPanelScrollTop = null;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            projectsPanel.scrollTop = toRestore;
+          });
+        });
+      }
+    }
   }
 
   /**
@@ -2265,36 +1643,6 @@ async applySavedWidth() {
       }
     } else {
       this.log('Auto-save disabled, skipping snapshot and history sync');
-    }
-
-    // 自动恢复阅读进度：仅在「会话刚切换」时执行（本轮 conversationId !== 上一轮），避免打开插件或同会话内消息更新时触发恢复导致页面自动上滚
-    try {
-      const conversationJustChanged = this._prevUpdateConversationId !== this.conversationId;
-      const shouldRestore = config && config.autoRestoreProgress &&
-        this.conversationId && this.messages.length > 0 &&
-        conversationJustChanged &&
-        this.progressRestoredForConversationId !== this.conversationId;
-      if (shouldRestore) {
-        // 自动恢复时不滚动页面，避免干扰用户浏览
-        const restored = await window.progressManager.restoreProgress(this.conversationId, this.messages, false);
-        if (restored) {
-          this.progressRestoredForConversationId = this.conversationId;
-          this.log('Progress restored (on conversation enter only, without scroll)');
-        }
-      }
-      this._prevUpdateConversationId = this.conversationId;
-    } catch (error) {
-      console.error('[SidebarUI] Error checking auto-restore config:', error);
-    }
-
-    // 仅当「自动保存」开启时才记录阅读进度，避免关闭后仍写入会话数据导致新对话被同步
-    if (config.autoSave !== false) {
-      this.startProgressTracking();
-    } else {
-      if (this.progressTimer) {
-        clearInterval(this.progressTimer);
-        this.progressTimer = null;
-      }
     }
 
     // 仅当侧边栏当前为展开状态时才应用主内容区边距，避免首次进入时出现空白占位
@@ -2487,87 +1835,15 @@ async applySavedWidth() {
   }
 
   updateTocSummary(total, userCount, aiCount, isFiltered) {
-    const summaryEl = this.shadowRoot.getElementById('toc-summary');
-    if (!summaryEl) return;
-    if (!total) {
-      summaryEl.textContent = '';
-      summaryEl.style.display = 'none';
-      return;
-    }
-    const label = isFiltered ? this._t('toc.summary.filtered') : this._t('toc.summary.total');
-    const itemsLabel = this._t('toc.summary.items');
-    const platformName = window.platformAdapter ? window.platformAdapter.getPlatformName() : 'Unknown';
-    const platformIcon = window.platformAdapter ? window.platformAdapter.getPlatformIcon() : '';
-    summaryEl.innerHTML = `
-      <div class="toc-summary-left">
-        <span>${label} ${total} ${itemsLabel}</span>
-        <span class="toc-summary-meta">${this._t('role.user')} ${userCount} · ${this._t('role.assistant')} ${aiCount}</span>
-      </div>
-      <div class="toc-summary-platform">
-        <img src="${platformIcon}" alt="" class="toc-summary-platform-icon" />
-        <span class="toc-summary-platform-name">${platformName}</span>
-      </div>
-    `;
-    summaryEl.style.display = 'flex';
+    if (this.tocMod) this.tocMod.updateTocSummary(total, userCount, aiCount, isFiltered);
   }
 
   findPreviewBreakpoint(content) {
-    if (!content || content.length <= 150) return content.length;
-    
-    const minLength = 100;
-    const maxLength = 300;
-    
-    let breakpoint = Math.min(200, content.length);
-    
-    const doubleNewline = content.indexOf('\n\n', minLength);
-    if (doubleNewline > 0 && doubleNewline <= maxLength) {
-      return doubleNewline;
-    }
-    
-    const sentenceEnds = /[。！？\n]/g;
-    let match;
-    let lastGoodBreak = minLength;
-    
-    while ((match = sentenceEnds.exec(content)) !== null) {
-      if (match.index >= minLength && match.index <= maxLength) {
-        lastGoodBreak = match.index + 1;
-      }
-      if (match.index > maxLength) break;
-    }
-    
-    if (lastGoodBreak > minLength) {
-      return lastGoodBreak;
-    }
-    
-    const englishSentenceEnds = /[.!?]\s+/g;
-    lastGoodBreak = minLength;
-    
-    while ((match = englishSentenceEnds.exec(content)) !== null) {
-      if (match.index >= minLength && match.index <= maxLength) {
-        lastGoodBreak = match.index + match[0].length;
-      }
-      if (match.index > maxLength) break;
-    }
-    
-    if (lastGoodBreak > minLength) {
-      return lastGoodBreak;
-    }
-    
-    return breakpoint;
+    return this.tocMod ? this.tocMod.findPreviewBreakpoint(content) : content.length;
   }
 
   countKeywordOccurrences(text, keyword) {
-    if (!text || !keyword) return 0;
-    const lowerText = text.toLowerCase();
-    const lowerKw = keyword.toLowerCase();
-    if (!lowerKw) return 0;
-    let count = 0;
-    let idx = 0;
-    while ((idx = lowerText.indexOf(lowerKw, idx)) !== -1) {
-      count += 1;
-      idx += lowerKw.length;
-    }
-    return count;
+    return this.tocMod ? this.tocMod.countKeywordOccurrences(text, keyword) : 0;
   }
 
   async toggleTocFavorite(messageId) {
@@ -2584,230 +1860,47 @@ async applySavedWidth() {
   }
 
   toggleTocItemExpand(tocItem, messageId) {
-    if (!tocItem) return;
-    
-    const isExpanded = tocItem.getAttribute('data-expanded') === 'true';
-    const collapsible = tocItem.querySelector('.toc-content-collapsible');
-    const expandBtn = tocItem.querySelector('.toc-expand-text-btn');
-    
-    if (!collapsible || !expandBtn) return;
-    
-    if (isExpanded) {
-      collapsible.classList.remove('toc-content-expanded');
-      collapsible.setAttribute('aria-expanded', 'false');
-      const fade = collapsible.querySelector('.toc-preview-fade');
-      if (fade) fade.style.display = 'block';
-      expandBtn.querySelector('.toc-expand-text').textContent = this._t('toc.expand');
-      expandBtn.querySelector('.toc-expand-icon').innerHTML = this.getIcon('chevronDown');
-      tocItem.setAttribute('data-expanded', 'false');
-      tocItem.classList.remove('toc-item-expanded');
-    } else {
-      collapsible.classList.add('toc-content-expanded');
-      collapsible.setAttribute('aria-expanded', 'true');
-      const fade = collapsible.querySelector('.toc-preview-fade');
-      if (fade) fade.style.display = 'none';
-      expandBtn.querySelector('.toc-expand-text').textContent = this._t('toc.collapse');
-      expandBtn.querySelector('.toc-expand-icon').innerHTML = this.getIcon('chevronUp');
-      tocItem.setAttribute('data-expanded', 'true');
-      tocItem.classList.add('toc-item-expanded');
-    }
-    
-    this.log('TOC item expanded:', !isExpanded);
+    if (this.tocMod) this.tocMod.toggleTocItemExpand(tocItem, messageId);
   }
 
   extractRemainingHTML(fullHtml, skipChars) {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = fullHtml;
-    
-    let charCount = 0;
-    let found = false;
-    const walker = document.createTreeWalker(tempDiv, NodeFilter.SHOW_TEXT);
-    
-    while (walker.nextNode()) {
-      const textNode = walker.currentNode;
-      const text = textNode.textContent || '';
-      
-      if (!found && charCount + text.length > skipChars) {
-        const offset = skipChars - charCount;
-        textNode.textContent = text.slice(offset);
-        found = true;
-      } else if (!found) {
-        charCount += text.length;
-        if (textNode.parentNode) textNode.parentNode.removeChild(textNode);
-      }
-    }
-    
-    return tempDiv.innerHTML || '<p class="toc-expanded-empty">' + this._t('toc.noMoreContent') + '</p>';
+    return this.tocMod ? this.tocMod.extractRemainingHTML(fullHtml, skipChars) : fullHtml;
   }
 
   highlightInElement(element, keyword) {
-    if (!element || typeof element.getElementsByTagName !== 'function') return;
-    const k = (keyword || '').trim();
-    this.clearHighlightInElement(element);
-    if (!k) return;
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
-      acceptNode(node) {
-        if (node.parentNode && (node.parentNode.tagName === 'SCRIPT' || node.parentNode.tagName === 'STYLE')) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    });
-    const toProcess = [];
-    let n;
-    while ((n = walker.nextNode())) toProcess.push(n);
-    const lowerK = k.toLowerCase();
-    toProcess.forEach((textNode) => {
-      const text = textNode.textContent;
-      if (!text || text.toLowerCase().indexOf(lowerK) === -1) return;
-      const parent = textNode.parentNode;
-      if (!parent) return;
-      const frag = document.createDocumentFragment();
-      let idx = 0;
-      let pos;
-      const lowerText = text.toLowerCase();
-      while ((pos = lowerText.indexOf(lowerK, idx)) !== -1) {
-        frag.appendChild(document.createTextNode(text.slice(idx, pos)));
-        const mark = document.createElement('mark');
-        mark.className = 'chatgpt-sidebar-msg-highlight';
-        mark.textContent = text.slice(pos, pos + k.length);
-        frag.appendChild(mark);
-        idx = pos + k.length;
-      }
-      frag.appendChild(document.createTextNode(text.slice(idx)));
-      parent.replaceChild(frag, textNode);
-    });
+    if (this.tocMod) this.tocMod.highlightInElement(element, keyword);
   }
 
   clearHighlightInElement(element) {
-    if (!element || typeof element.querySelectorAll !== 'function') return;
-    element.querySelectorAll('.chatgpt-sidebar-msg-highlight').forEach((mark) => {
-      const text = document.createTextNode(mark.textContent);
-      mark.parentNode.replaceChild(text, mark);
-    });
-    element.normalize();
+    if (this.tocMod) this.tocMod.clearHighlightInElement(element);
   }
 
   resolveMessageElement(messageId) {
-    if (!messageId) return null;
-    if (messageId.startsWith('hist_msg_') || messageId.startsWith('proj_msg_')) {
-      const item = this.shadowRoot.querySelector(`.toc-item[data-message-id="${messageId}"]`);
-      if (!item) return null;
-      return item.querySelector('.toc-content-full') || item.querySelector('.toc-content-wrapper') || item;
-    }
-    const el = (window.tocManager && window.tocManager.messageIdToElement && window.tocManager.messageIdToElement[messageId]) || (this.messages.find((m) => m.id === messageId) || {}).element;
-    return el && el.isConnected ? el : null;
+    return this.tocMod ? this.tocMod.resolveMessageElement(messageId) : null;
   }
 
   scrollHighlightIntoViewCenter(markEl) {
-    if (!markEl || typeof markEl.scrollIntoView !== 'function') return;
-    markEl.scrollIntoView({ block: 'center', behavior: 'smooth', inline: 'nearest' });
+    if (this.tocMod) this.tocMod.scrollHighlightIntoViewCenter(markEl);
   }
 
   openMsgSearchOverlay(messageId) {
-    this.closeMsgSearchOverlay();
-    const tocItem = this.shadowRoot.querySelector(`.toc-item[data-message-id="${messageId}"]`);
-    if (!tocItem) { this.log('TOC item not found'); return; }
-    const element = this.resolveMessageElement(messageId);
-    if (!element) { this.log('Message element not found'); return; }
-    this.currentMsgSearchMessageId = messageId;
-    this.currentMsgSearchElement = element;
-    const root = document.createElement('div');
-    root.className = 'toc-msg-search-float';
-    root.setAttribute('role', 'search');
-    root.setAttribute('aria-label', this._t('msgSearch.ariaLabel'));
-    root.innerHTML = '<span class="toc-msg-search-float-icon toc-msg-search-float-icon-svg" aria-hidden="true">' + this.getIcon('search') + '</span><input type="text" class="toc-msg-search-float-input" placeholder="' + this._t('msgSearch.placeholder') + '"><button type="button" class="toc-msg-search-float-close" title="' + this._t('action.close') + '">' + this.getIcon('close') + '</button>';
-    const panel = tocItem.closest('.tab-panel') || this.shadowRoot.querySelector('[data-panel="toc"]');
-    const nextItem = tocItem.nextElementSibling && tocItem.nextElementSibling.classList.contains('toc-item') ? tocItem.nextElementSibling : null;
-    if (panel && nextItem) {
-      const panelRect = panel.getBoundingClientRect();
-      const itemRect = tocItem.getBoundingClientRect();
-      const nextRect = nextItem.getBoundingClientRect();
-      const gapMiddle = (itemRect.bottom + nextRect.top) / 2;
-      const top = gapMiddle - panelRect.top;
-      const maxWidth = Math.max(220, panelRect.width - 32);
-      const contentWidth = Math.min(maxWidth, Math.max(200, Math.floor(itemRect.width * 0.82)));
-      const left = Math.max(8, Math.floor((panelRect.width - contentWidth) / 2));
-      root.style.top = `${top}px`;
-      root.style.left = `${left}px`;
-      root.style.width = `${contentWidth}px`;
-      root.style.height = 'auto';
-      root.style.transform = 'translateY(-50%)';
-      root.style.position = 'absolute';
-      root.style.boxSizing = 'border-box';
-      panel.appendChild(root);
-    } else {
-      tocItem.appendChild(root);
-    }
-    this.msgSearchFloatRoot = root;
-    const input = root.querySelector('.toc-msg-search-float-input');
-    const closeBtn = root.querySelector('.toc-msg-search-float-close');
-    input.value = '';
-    input.focus();
-    closeBtn.addEventListener('click', () => this.closeMsgSearchOverlay());
-    let highlightIndex = 0;
-    const applyHighlight = () => {
-      const el = this.resolveMessageElement(this.currentMsgSearchMessageId);
-      if (!el) return;
-      this.currentMsgSearchElement = el;
-      this.highlightInElement(el, input.value);
-      const marks = el.querySelectorAll('.chatgpt-sidebar-msg-highlight');
-      if (marks.length > 0) { highlightIndex = 0; this.scrollHighlightIntoViewCenter(marks[0]); }
-    };
-    const goToNextHighlight = () => {
-      const el = this.resolveMessageElement(this.currentMsgSearchMessageId);
-      if (!el) return;
-      const marks = el.querySelectorAll('.chatgpt-sidebar-msg-highlight');
-      if (marks.length === 0) return;
-      highlightIndex = (highlightIndex + 1) % marks.length;
-      this.scrollHighlightIntoViewCenter(marks[highlightIndex]);
-    };
-    input.addEventListener('input', applyHighlight);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') this.closeMsgSearchOverlay();
-      if (e.key === 'Enter') { e.preventDefault(); goToNextHighlight(); }
-    });
-    input.addEventListener('focus', () => { if (input.value.trim()) applyHighlight(); });
+    if (this.tocMod) this.tocMod.openMsgSearchOverlay(messageId);
   }
 
   closeMsgSearchOverlay() {
-    const el = this.currentMsgSearchMessageId ? this.resolveMessageElement(this.currentMsgSearchMessageId) : this.currentMsgSearchElement;
-    if (el) this.clearHighlightInElement(el);
-    if (this.msgSearchFloatRoot && this.msgSearchFloatRoot.parentNode) this.msgSearchFloatRoot.remove();
-    this.msgSearchFloatRoot = null;
-    this.currentMsgSearchElement = null;
-    this.currentMsgSearchMessageId = null;
+    if (this.tocMod) this.tocMod.closeMsgSearchOverlay();
   }
 
   getMsgSearchExpectedTab(messageId) {
-    if (!messageId) return null;
-    if (messageId.startsWith('hist_msg_')) return 'conversations';
-    if (messageId.startsWith('proj_msg_')) return 'projects';
-    return 'toc';
+    return this.tocMod ? this.tocMod.getMsgSearchExpectedTab(messageId) : 'toc';
   }
 
   stashMsgSearchOverlayForNextTab(nextTab) {
-    if (!this.msgSearchFloatRoot || !this.currentMsgSearchMessageId) return;
-    const expected = this.getMsgSearchExpectedTab(this.currentMsgSearchMessageId);
-    if (expected && expected === nextTab) return;
-    const input = this.msgSearchFloatRoot.querySelector('.toc-msg-search-float-input');
-    this.msgSearchPersist = {
-      messageId: this.currentMsgSearchMessageId,
-      keyword: (input && input.value) ? input.value : ''
-    };
-    this.closeMsgSearchOverlay();
+    if (this.tocMod) this.tocMod.stashMsgSearchOverlayForNextTab(nextTab);
   }
 
   restoreMsgSearchOverlayForTab(tabName) {
-    if (!this.msgSearchPersist || !this.msgSearchPersist.messageId) return;
-    const expected = this.getMsgSearchExpectedTab(this.msgSearchPersist.messageId);
-    if (expected && expected !== tabName) return;
-    this.openMsgSearchOverlay(this.msgSearchPersist.messageId);
-    const input = this.msgSearchFloatRoot?.querySelector('.toc-msg-search-float-input');
-    if (!input) return;
-    input.value = this.msgSearchPersist.keyword || '';
-    if (input.value.trim()) {
-      input.dispatchEvent(new Event('input'));
-    }
-    this.msgSearchPersist = null;
+    if (this.tocMod) this.tocMod.restoreMsgSearchOverlayForTab(tabName);
   }
 
   async copyMessageWithFormat(messageId, msg) {
@@ -2846,106 +1939,11 @@ async applySavedWidth() {
   }
 
   extractMessageHTML(element) {
-    if (!element) return '';
-
-    const clone = element.cloneNode(true);
-    
-    const buttonsToRemove = clone.querySelectorAll('button, [role="button"], .copy-button, .regenerate-button');
-    buttonsToRemove.forEach(btn => btn.remove());
-
-    const avatarsToRemove = clone.querySelectorAll('.avatar, [data-testid*="avatar"]');
-    avatarsToRemove.forEach(avatar => avatar.remove());
-
-    // Remove UI icons (e.g. file card svg icon) from extracted content
-    const svgIcons = clone.querySelectorAll('svg');
-    svgIcons.forEach((el) => el.remove());
-    
-    const contentElement = clone.querySelector('[data-message-author-role], .markdown, .message-content, [class*="prose"]') || clone;
-    
-    let html = contentElement.innerHTML || '';
-    
-    html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
-    html = html.replace(/<!--[\s\S]*?-->/g, '');
-    // Remove inline styles to avoid leaking original UI colors (e.g. file cards)
-    html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
-    html = html.trim();
-    
-    return html;
+    return this.tocMod ? this.tocMod.extractMessageHTML(element) : '';
   }
 
   extractMessageHTMLForDisplay(element) {
-    if (!element) return '';
-
-    const clone = element.cloneNode(true);
-
-    const buttonsToRemove = clone.querySelectorAll('button, [role="button"], .copy-code, .regenerate-button');
-    buttonsToRemove.forEach(btn => btn.remove());
-
-    const avatarsToRemove = clone.querySelectorAll('.avatar, [data-testid*="avatar"], img[alt*="avatar"]');
-    avatarsToRemove.forEach(avatar => avatar.remove());
-
-    // Remove UI icons (e.g. file card svg icon) from extracted content
-    const svgIcons = clone.querySelectorAll('svg');
-    svgIcons.forEach((el) => el.remove());
-
-    // 优先使用角色容器的完整内容，避免内容在图片处截断
-    let html = '';
-    let usedBlocks = [];
-    const roleContainer = clone.querySelector('[data-message-author-role]');
-    if (roleContainer) {
-      html = (roleContainer.innerHTML || '').trim();
-      usedBlocks = [roleContainer];
-    } else {
-      // 回退到原有逻辑：选择特定内容块
-      const contentBlocks = clone.querySelectorAll('.markdown, .message-content, [class*="prose"]');
-      const blocksArray = Array.from(contentBlocks);
-      const topLevelBlocks = blocksArray.filter((el) => {
-        return !blocksArray.some((other) => other !== el && other.contains(el));
-      });
-      usedBlocks = topLevelBlocks;
-      const rootBlock = blocksArray.find((el) => blocksArray.every((other) => el === other || el.contains(other)));
-      if (rootBlock) {
-        html = (rootBlock.innerHTML || '').trim();
-        usedBlocks = [rootBlock];
-      } else if (topLevelBlocks.length === 1) {
-        html = (topLevelBlocks[0].innerHTML || '').trim();
-        usedBlocks = [topLevelBlocks[0]];
-      } else if (topLevelBlocks.length > 1) {
-        const parent = topLevelBlocks[0].parentElement;
-        if (parent && clone.contains(parent)) {
-          html = (parent.innerHTML || '').trim();
-          usedBlocks = [parent];
-        } else {
-          const parts = topLevelBlocks.map((el) => (el.innerHTML || '').trim()).filter(Boolean);
-          html = parts.join('\n\n');
-        }
-      }
-    }
-
-    html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
-    html = html.replace(/<!--[\s\S]*?-->/g, '');
-    // Remove inline styles to avoid leaking original UI colors (e.g. file cards)
-    html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
-
-    html = html.replace(/<a\s+/gi, '<a target="_blank" rel="noopener noreferrer" ');
-
-    html = html.replace(/<p>/gi, '<p class="toc-expanded-p">');
-    html = html.replace(/<ul>/gi, '<ul class="toc-expanded-ul">');
-    html = html.replace(/<ol>/gi, '<ol class="toc-expanded-ol">');
-    html = html.replace(/<li>/gi, '<li class="toc-expanded-li">');
-    html = html.replace(/<pre>/gi, '<pre class="toc-expanded-pre">');
-    html = html.replace(/<code>/gi, '<code class="toc-expanded-code">');
-    html = html.replace(/<h([1-6])>/gi, '<h$1 class="toc-expanded-h$1">');
-    html = html.replace(/<blockquote>/gi, '<blockquote class="toc-expanded-blockquote">');
-    html = html.replace(/<strong>/gi, '<strong class="toc-expanded-strong">');
-    html = html.replace(/<b>/gi, '<b class="toc-expanded-b">');
-    html = html.replace(/<br\s*\/?>/gi, '<br>');
-
-    html = html.trim();
-    html = this.stripMediaElements(html);
-    html = this.deduplicateMediaBySrc(html);
-
-    return html || '';
+    return this.tocMod ? this.tocMod.extractMessageHTMLForDisplay(element) : '';
   }
 
   /**
@@ -3082,340 +2080,13 @@ async applySavedWidth() {
 
   extractFormattedText(element) {
     if (!element) return '';
-    
     const html = this.extractMessageHTML(element);
-    return this.renderHtmlToText(html);
+    return (window.HtmlToMarkdown && window.HtmlToMarkdown.toText(html)) || '';
   }
 
   convertHTMLToFormattedText(element) {
     if (!element) return '';
-    return this.renderHtmlToText(element.innerHTML || '');
-  }
-
-  renderHtmlToMarkdown(html) {
-    const blocks = this.parseHtmlToBlocks(html);
-    return this.renderBlocksToMarkdown(blocks);
-  }
-
-  renderHtmlToText(html) {
-    const blocks = this.parseHtmlToBlocks(html);
-    return this.renderBlocksToText(blocks);
-  }
-
-  parseHtmlToBlocks(html) {
-    if (!html || !html.trim()) return [];
-    const container = document.createElement('div');
-    container.innerHTML = html;
-    return this.collectBlocks(container);
-  }
-
-  collectBlocks(root) {
-    const blocks = [];
-    root.childNodes.forEach((node) => {
-      blocks.push(...this.nodeToBlocks(node));
-    });
-    return blocks.filter((b) => b && b.type);
-  }
-
-  nodeToBlocks(node) {
-    if (!node) return [];
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = this.normalizeInlineText(node.textContent || '');
-      if (!text.trim()) return [];
-      return [{ type: 'paragraph', inlines: [{ type: 'text', value: text }] }];
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return [];
-    const tag = node.tagName.toLowerCase();
-    if (tag === 'p') {
-      const inlines = this.parseInlineTokens(node);
-      if (!this.hasInlineContent(inlines)) return [];
-      return [{ type: 'paragraph', inlines }];
-    }
-    if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') {
-      const inlines = this.parseInlineTokens(node);
-      if (!this.hasInlineContent(inlines)) return [];
-      return [{ type: 'heading', level: parseInt(tag[1], 10), inlines }];
-    }
-    if (tag === 'ul' || tag === 'ol') {
-      return [this.parseList(node)];
-    }
-    if (tag === 'pre') {
-      const codeEl = node.querySelector('code');
-      const text = (codeEl || node).textContent || '';
-      const langClass = codeEl && codeEl.className ? codeEl.className : node.className || '';
-      const langMatch = langClass.match(/language-([a-z0-9_-]+)/i);
-      const lang = langMatch ? langMatch[1] : '';
-      return [{ type: 'code', lang, text: text.replace(/\n$/, '') }];
-    }
-    if (tag === 'blockquote') {
-      const inner = this.collectBlocks(node);
-      if (!inner.length) return [];
-      return [{ type: 'blockquote', blocks: inner }];
-    }
-    if (tag === 'table') {
-      return [this.parseTable(node)];
-    }
-    if (tag === 'hr') {
-      return [{ type: 'hr' }];
-    }
-    if (tag === 'div' || tag === 'section' || tag === 'article') {
-      return this.collectBlocks(node);
-    }
-    if (tag === 'br') {
-      return [{ type: 'paragraph', inlines: [{ type: 'br' }] }];
-    }
-    const inlines = this.parseInlineTokens(node);
-    if (this.hasInlineContent(inlines)) {
-      return [{ type: 'paragraph', inlines }];
-    }
-    return [];
-  }
-
-  parseList(listEl) {
-    const ordered = listEl.tagName.toLowerCase() === 'ol';
-    const items = [];
-    Array.from(listEl.children).forEach((li) => {
-      if (li.tagName && li.tagName.toLowerCase() === 'li') {
-        items.push(this.parseListItem(li));
-      }
-    });
-    return { type: 'list', ordered, items };
-  }
-
-  parseListItem(li) {
-    const clone = li.cloneNode(true);
-    clone.querySelectorAll('ul, ol').forEach((n) => n.remove());
-    const inlines = this.parseInlineTokens(clone);
-    const children = [];
-    li.querySelectorAll(':scope > ul, :scope > ol').forEach((sub) => {
-      children.push(this.parseList(sub));
-    });
-    return { type: 'listItem', inlines, children };
-  }
-
-  parseTable(tableEl) {
-    const rows = [];
-    let hasHeader = false;
-    Array.from(tableEl.querySelectorAll('tr')).forEach((tr) => {
-      const cells = [];
-      Array.from(tr.children).forEach((cell) => {
-        const tag = cell.tagName ? cell.tagName.toLowerCase() : '';
-        if (tag === 'th') hasHeader = true;
-        if (tag === 'td' || tag === 'th') {
-          const inlines = this.parseInlineTokens(cell);
-          const text = this.renderInlineToText(inlines).trim();
-          cells.push(text);
-        }
-      });
-      if (cells.length) rows.push(cells);
-    });
-    return { type: 'table', rows, hasHeader };
-  }
-
-  parseInlineTokens(root) {
-    const collect = (node) => {
-      if (!node) return [];
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = this.normalizeInlineText(node.textContent || '');
-        return text ? [{ type: 'text', value: text }] : [];
-      }
-      if (node.nodeType !== Node.ELEMENT_NODE) return [];
-      const tag = node.tagName.toLowerCase();
-      if (tag === 'br') return [{ type: 'br' }];
-      if (tag === 'strong' || tag === 'b') {
-        const children = [];
-        Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
-        return children.length ? [{ type: 'strong', children }] : [];
-      }
-      if (tag === 'em' || tag === 'i') {
-        const children = [];
-        Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
-        return children.length ? [{ type: 'em', children }] : [];
-      }
-      if (tag === 'code') {
-        const text = (node.textContent || '').replace(/\n/g, ' ').trim();
-        return text ? [{ type: 'code', value: text }] : [];
-      }
-      if (tag === 'a') {
-        const href = node.getAttribute('href') || '';
-        const children = [];
-        Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
-        return children.length ? [{ type: 'link', href, children }] : [];
-      }
-      // 忽略 mark 和 span 等高亮标签，直接提取内容
-      if (tag === 'mark' || tag === 'span') {
-        const tokens = [];
-        Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
-        return tokens;
-      }
-      const tokens = [];
-      Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
-      return tokens;
-    };
-    const tokens = [];
-    Array.from(root.childNodes).forEach((child) => tokens.push(...collect(child)));
-    return tokens;
-  }
-
-  normalizeInlineText(text) {
-    if (!text) return '';
-    return text.replace(/\s+/g, ' ');
-  }
-
-  hasInlineContent(tokens) {
-    return tokens.some((t) => (t.type === 'text' && t.value.trim()) || t.type === 'code' || t.type === 'link');
-  }
-
-  renderBlocksToMarkdown(blocks) {
-    const parts = blocks.map((block) => this.renderBlockToMarkdown(block, 0)).filter(Boolean);
-    return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  renderBlockToMarkdown(block, depth) {
-    if (!block) return '';
-    if (block.type === 'paragraph') {
-      return this.renderInlineToMarkdown(block.inlines);
-    }
-    if (block.type === 'heading') {
-      const level = Math.min(6, Math.max(4, block.level + 3));
-      const text = this.renderInlineToMarkdown(block.inlines);
-      return `${'#'.repeat(level)} ${text}`;
-    }
-    if (block.type === 'list') {
-      return this.renderListToMarkdown(block, depth);
-    }
-    if (block.type === 'code') {
-      const lang = block.lang ? block.lang : '';
-      return `\n\`\`\`${lang}\n${block.text}\n\`\`\``.trim();
-    }
-    if (block.type === 'blockquote') {
-      const inner = this.renderBlocksToMarkdown(block.blocks);
-      return inner.split('\n').map((line) => (line.trim() ? `> ${line}` : '>')).join('\n');
-    }
-    if (block.type === 'table') {
-      return this.renderTableToMarkdown(block);
-    }
-    if (block.type === 'hr') {
-      return '---';
-    }
-    return '';
-  }
-
-  renderListToMarkdown(list, depth) {
-    const lines = [];
-    list.items.forEach((item, idx) => {
-      const indent = '  '.repeat(depth);
-      const prefix = list.ordered ? `${idx + 1}. ` : '- ';
-      const text = this.renderInlineToMarkdown(item.inlines);
-      lines.push(`${indent}${prefix}${text}`.trimEnd());
-      if (item.children && item.children.length) {
-        item.children.forEach((child) => {
-          const childText = this.renderListToMarkdown(child, depth + 1);
-          if (childText) lines.push(childText);
-        });
-      }
-    });
-    return lines.join('\n');
-  }
-
-  renderTableToMarkdown(table) {
-    if (!table.rows || !table.rows.length) return '';
-    const rows = table.rows;
-    const header = table.hasHeader ? rows[0] : rows[0].map((_, i) => `列${i + 1}`);
-    const bodyRows = table.hasHeader ? rows.slice(1) : rows;
-    const headerLine = `| ${header.join(' | ')} |`;
-    const sepLine = `| ${header.map(() => '---').join(' | ')} |`;
-    const bodyLines = bodyRows.map((row) => `| ${row.join(' | ')} |`);
-    return [headerLine, sepLine].concat(bodyLines).join('\n');
-  }
-
-  renderBlocksToText(blocks) {
-    const parts = blocks.map((block) => this.renderBlockToText(block, 0)).filter(Boolean);
-    return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  renderBlockToText(block, depth) {
-    if (!block) return '';
-    if (block.type === 'paragraph') {
-      return this.renderInlineToText(block.inlines);
-    }
-    if (block.type === 'heading') {
-      const level = Math.min(4, Math.max(2, block.level));
-      const text = this.renderInlineToText(block.inlines);
-      return `${'#'.repeat(level)} ${text}`;
-    }
-    if (block.type === 'list') {
-      return this.renderListToText(block, depth);
-    }
-    if (block.type === 'code') {
-      return `\n\`\`\`\n${block.text}\n\`\`\``.trim();
-    }
-    if (block.type === 'blockquote') {
-      const inner = this.renderBlocksToText(block.blocks);
-      return inner.split('\n').map((line) => (line.trim() ? `> ${line}` : '>')).join('\n');
-    }
-    if (block.type === 'table') {
-      return this.renderTableToText(block);
-    }
-    if (block.type === 'hr') {
-      return '-'.repeat(24);
-    }
-    return '';
-  }
-
-  renderListToText(list, depth) {
-    const lines = [];
-    list.items.forEach((item, idx) => {
-      const indent = '  '.repeat(depth);
-      const prefix = list.ordered ? `${idx + 1}. ` : '- ';
-      const text = this.renderInlineToText(item.inlines);
-      lines.push(`${indent}${prefix}${text}`.trimEnd());
-      if (item.children && item.children.length) {
-        item.children.forEach((child) => {
-          const childText = this.renderListToText(child, depth + 1);
-          if (childText) lines.push(childText);
-        });
-      }
-    });
-    return lines.join('\n');
-  }
-
-  renderTableToText(table) {
-    if (!table.rows || !table.rows.length) return '';
-    return table.rows.map((row) => row.join(' | ')).join('\n');
-  }
-
-  renderInlineToMarkdown(tokens) {
-    const parts = tokens.map((t) => {
-      if (t.type === 'text') return t.value;
-      if (t.type === 'br') return '\n';
-      // 导出 MD 时不保留行内 code 的反引号，避免出现黄色高亮框
-      if (t.type === 'code') return t.value;
-      if (t.type === 'strong') return '**' + this.renderInlineToMarkdown(t.children) + '**';
-      if (t.type === 'em') return '*' + this.renderInlineToMarkdown(t.children) + '*';
-      if (t.type === 'link') {
-        const text = this.renderInlineToMarkdown(t.children);
-        return text ? `[${text}](${t.href})` : t.href;
-      }
-      return '';
-    });
-    return parts.join('').replace(/\n{3,}/g, '\n\n').trim();
-  }
-
-  renderInlineToText(tokens) {
-    const parts = tokens.map((t) => {
-      if (t.type === 'text') return t.value;
-      if (t.type === 'br') return '\n';
-      // TXT 也输出纯文本，避免多余标记
-      if (t.type === 'code') return t.value;
-      if (t.type === 'strong' || t.type === 'em') return this.renderInlineToText(t.children);
-      if (t.type === 'link') {
-        const text = this.renderInlineToText(t.children);
-        return t.href ? `${text} (${t.href})` : text;
-      }
-      return '';
-    });
-    return parts.join('').replace(/\n{3,}/g, '\n\n').trim();
+    return (window.HtmlToMarkdown && window.HtmlToMarkdown.toText(element.innerHTML || '')) || '';
   }
 
   showCopyFeedback(message) {
@@ -3460,92 +2131,36 @@ async applySavedWidth() {
     });
   }
 
-  /** 筛选：根据当前日期范围返回起止时间戳（毫秒）。最近3天/7天不包含当天 */
   getFilterDateRange() {
-    const now = Date.now();
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayStartMs = todayStart.getTime();
-    if (this.tocFilterDateRange === 'today') return { start: todayStartMs, end: now };
-    if (this.tocFilterDateRange === 'last3Days') {
-      const end = todayStartMs - 1;
-      const start = todayStartMs - 3 * 86400 * 1000;
-      return { start, end };
-    }
-    if (this.tocFilterDateRange === 'last7Days') {
-      const end = todayStartMs - 1;
-      const start = todayStartMs - 7 * 86400 * 1000;
-      return { start, end };
-    }
-    if (this.tocFilterDateRange === 'custom') return { start: this.tocFilterStartDate || 0, end: this.tocFilterEndDate || now };
-    return { start: null, end: null };
+    return this.filterMod ? this.filterMod.getFilterDateRange() : { start: null, end: null };
   }
 
   formatDateForInput(ms) {
-    if (!ms) return '';
-    const d = new Date(ms);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}/${m}/${day}`;
+    return this.filterMod ? this.filterMod.formatDateForInput(ms) : '';
   }
 
   parseDateInput(str) {
-    if (!str || !str.trim()) return null;
-    const normalized = str.trim().replace(/-/g, '/');
-    const d = new Date(normalized);
-    if (isNaN(d.getTime())) return null;
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
+    return this.filterMod ? this.filterMod.parseDateInput(str) : null;
   }
 
   hasActiveFilter() {
-    if (this.tocFilterDateRange) return true;
-    if ((this.tocFilterStartDate || this.tocFilterEndDate)) return true;
-    if (this.tocFilterPlatforms && this.tocFilterPlatforms.length > 0) return true;
-    return false;
+    return this.filterMod ? this.filterMod.hasActiveFilter() : false;
   }
 
   applyFilterFromPanel(startInputId = 'filter-start-date', endInputId = 'filter-end-date') {
-    const startEl = this.shadowRoot.getElementById(startInputId);
-    const endEl = this.shadowRoot.getElementById(endInputId);
-    if (startEl && startEl.value.trim()) this.tocFilterStartDate = this.parseDateInput(startEl.value);
-    if (endEl && endEl.value.trim()) this.tocFilterEndDate = this.parseDateInput(endEl.value);
+    if (this.filterMod) this.filterMod.applyFilterFromPanel(startInputId, endInputId);
   }
 
   clearTocFilter() {
-    this.tocFilterDateRange = null;
-    this.tocFilterStartDate = null;
-    this.tocFilterEndDate = null;
-    this.tocFilterPlatforms = [];
+    if (this.filterMod) this.filterMod.clearTocFilter();
   }
 
   syncFilterPanelUI(panelScope = 'conversations') {
-    if (panelScope !== 'conversations' && panelScope !== 'projects') return;
-    const rangeSelector = panelScope === 'conversations' ? '#conversations-filter-panel .filter-range-btn' : '#projects-filter-panel .filter-range-btn';
-    this.shadowRoot.querySelectorAll(rangeSelector).forEach((btn) => {
-      btn.classList.toggle('active', btn.getAttribute('data-range') === this.tocFilterDateRange);
-    });
-    const startId = panelScope === 'conversations' ? 'conv-filter-start-date' : 'projects-filter-start-date';
-    const endId = panelScope === 'conversations' ? 'conv-filter-end-date' : 'projects-filter-end-date';
-    const startEl = this.shadowRoot.getElementById(startId);
-    const endEl = this.shadowRoot.getElementById(endId);
-    if (startEl) startEl.value = this.tocFilterStartDate ? this.formatDateForInput(this.tocFilterStartDate) : '';
-    if (endEl) endEl.value = this.tocFilterEndDate ? this.formatDateForInput(this.tocFilterEndDate) : '';
-    const optsId = panelScope === 'conversations' ? 'conv-filter-platform-options' : 'projects-filter-platform-options';
-    const opts = this.shadowRoot.getElementById(optsId);
-    if (opts) opts.querySelectorAll('input[type="checkbox"]').forEach((cb) => { cb.checked = (this.tocFilterPlatforms || []).includes(cb.value); });
-    const triggerId = panelScope === 'conversations' ? 'conv-filter-platform-trigger' : 'projects-filter-platform-trigger';
-    this.updateFilterPlatformTriggerText(triggerId);
+    if (this.filterMod) this.filterMod.syncFilterPanelUI(panelScope);
   }
 
   updateFilterPlatformTriggerText(triggerId = 'filter-platform-trigger') {
-    const trigger = this.shadowRoot.getElementById(triggerId);
-    if (!trigger) return;
-    const n = (this.tocFilterPlatforms || []).length;
-    if (n === 0) trigger.textContent = this._t('filter.selectPlatform');
-    else if (n === 3) trigger.textContent = this._t('filter.allPlatforms');
-    else trigger.textContent = this._t('filter.selectedPlatforms', { n: String(n) });
+    if (this.filterMod) this.filterMod.updateFilterPlatformTriggerText(triggerId);
   }
 
   formatTimeAgo(ms) {
@@ -3802,11 +2417,17 @@ async applySavedWidth() {
       const key = item.getAttribute('data-project-key');
       if (!header) return;
       header.onclick = (e) => {
+        const dot = e.target.closest('.export-select-dot');
+        if (dot) {
+          e.stopPropagation();
+          e.preventDefault();
+          this.toggleExportSelectionFromDot(dot);
+          return;
+        }
         e.stopPropagation();
         e.preventDefault();
         if (e.target.closest('.project-item-header-actions')) return;
         if (this.exportState.active && this.exportState.scope === 'history') {
-          if (e.target.closest('.export-select-dot')) return;
           item.classList.toggle('expanded');
           this.updateHistoryExpandedState(key, item.classList.contains('expanded'));
           return;
@@ -4256,8 +2877,11 @@ async applySavedWidth() {
    * @param {string} conversationId
    * @param {HTMLElement} containerElement - .project-conv-detail
    */
-  async renderProjectConversationMessages(conversationId, containerElement, searchKeyword) {
+  async renderProjectConversationMessages(conversationId, containerElement, searchKeyword, options = {}) {
     if (!containerElement) return;
+    const { preserveScroll = true, scrollToMatch = false } = options || {};
+    const prevScrollEl = containerElement.querySelector('.conv-detail-toc-list');
+    const prevScrollTop = preserveScroll && prevScrollEl ? prevScrollEl.scrollTop : 0;
     try {
       const convData = await window.storageManager.getConversation(conversationId);
       const messages = convData.messages || [];
@@ -4362,8 +2986,14 @@ async applySavedWidth() {
           });
         });
       });
-      if (kw && containerElement.querySelector('.search-keyword-highlight')) {
+      if (scrollToMatch && kw && containerElement.querySelector('.search-keyword-highlight')) {
         containerElement.querySelector('.search-keyword-highlight').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else if (preserveScroll) {
+        const nextScrollEl = containerElement.querySelector('.conv-detail-toc-list');
+        if (nextScrollEl) {
+          const maxTop = Math.max(0, nextScrollEl.scrollHeight - nextScrollEl.clientHeight);
+          nextScrollEl.scrollTop = Math.min(prevScrollTop, maxTop);
+        }
       }
       this.restoreMsgSearchOverlayForTab('projects');
     } catch (e) {
@@ -4415,7 +3045,7 @@ async applySavedWidth() {
    */
   handleProjectDetailSearch(keyword) {
     if (!this.projectsDetailMessagesEl || !this.projectsDetailMessages || !this.projectsDetailConvId) return;
-    this.renderProjectConversationMessages(this.projectsDetailConvId, this.projectsDetailMessagesEl, keyword);
+    this.renderProjectConversationMessages(this.projectsDetailConvId, this.projectsDetailMessagesEl, keyword, { scrollToMatch: true });
   }
 
   /**
@@ -4624,6 +3254,14 @@ async applySavedWidth() {
    * 渲染项目列表（可展开、对话列表、移除/移动）
    */
   async renderProjects() {
+    // 在项目对话详情视图时，保存滚动位置，避免 storage 触发重渲染后自动跳回顶部
+    const panel = this.shadowRoot?.querySelector('.tab-panel[data-panel="projects"]');
+    if (panel && this.projectsViewState?.level === 'conversation') {
+      this._savedProjectsPanelScrollTop = panel.scrollTop;
+    } else {
+      this._savedProjectsPanelScrollTop = null;
+    }
+
     const myProjects = window.projectManager.getMyProjects();
     const allConvIds = [];
     Object.values(myProjects).forEach((p) => allConvIds.push(...(p.conversations || [])));
@@ -5101,37 +3739,6 @@ async applySavedWidth() {
   }
 
   /**
-   * 渲染书签列表
-   */
-  async renderBookmarks() {
-    if (!this.conversationId) return;
-    const bookmarkList = this.shadowRoot.getElementById('bookmark-list');
-    if (!bookmarkList) return; // bookmarks panel removed
-
-    const bookmarks = window.bookmarkManager.getBookmarksForConversation(this.conversationId);
-
-    if (bookmarks.length === 0) {
-      bookmarkList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⭐</div><div class="empty-state-text">' + this._t('empty.noBookmarks').replace(/\n/g, '<br>') + '</div></div>';
-      return;
-    }
-
-    bookmarkList.innerHTML = bookmarks.map(bookmark => `
-      <li class="bookmark-item" data-bookmark-id="${bookmark.id}" data-message-id="${bookmark.messageId}">
-        <div class="bookmark-title">${this.escapeHtml(bookmark.title)}</div>
-        <div class="bookmark-meta">${new Date(bookmark.createdAt).toLocaleString('zh-CN')}</div>
-      </li>
-    `).join('');
-
-    // 绑定点击事件
-    bookmarkList.querySelectorAll('.bookmark-item').forEach(item => {
-      item.addEventListener('click', () => {
-        const messageId = item.getAttribute('data-message-id');
-        window.tocManager.jumpToMessage(messageId);
-      });
-    });
-  }
-
-  /**
    * 显示创建项目对话框
    */
   showCreateProjectDialog() {
@@ -5235,71 +3842,6 @@ async applySavedWidth() {
         (this.container || this.shadowRoot).appendChild(subDialog);
       });
     }
-  }
-
-  /**
-   * 为当前最后一条用户消息添加书签
-   */
-  async addBookmarkForCurrentMessage() {
-    if (!this.conversationId || this.messages.length === 0) {
-      this.showToast(this._t('toast.noMessages'));
-      return;
-    }
-
-    // 找到最后一条用户消息
-    const userMessages = this.messages.filter(m => m.role === 'user');
-    if (userMessages.length === 0) {
-      this.showToast(this._t('toast.noUserMessage'));
-      return;
-    }
-
-    const lastUserMsg = userMessages[userMessages.length - 1];
-
-    // 检查是否已添加书签
-    if (window.bookmarkManager.hasBookmark(this.conversationId, lastUserMsg.id)) {
-      this.showToast(this._t('toast.bookmarkAdded'));
-      return;
-    }
-
-    // 添加书签
-    const title = window.tocManager.generateTitle(lastUserMsg.content);
-    await window.bookmarkManager.addBookmark(this.conversationId, lastUserMsg.id, title);
-
-    this.renderBookmarks();
-    this.showToast(this._t('toast.bookmarkSuccess'));
-    this.log('Bookmark added for message:', lastUserMsg.id);
-  }
-
-  /**
-   * 恢复阅读进度（用户手动点击按钮时调用，会滚动到上次位置）
-   */
-  async restoreProgress() {
-    if (!this.conversationId) return;
-
-    // 手动恢复时传入 true，滚动到上次阅读位置
-    const restored = await window.progressManager.restoreProgress(this.conversationId, this.messages, true);
-
-    if (restored) {
-      this.log('Progress restored (with scroll)');
-    } else {
-      this.log('No progress to restore');
-    }
-  }
-
-  /**
-   * 开始跟踪阅读进度
-   */
-  startProgressTracking() {
-    // 监听滚动事件
-    if (this.progressTimer) {
-      clearInterval(this.progressTimer);
-    }
-
-    this.progressTimer = setInterval(() => {
-      if (this.conversationId && this.messages.length > 0) {
-        window.progressManager.autoRecordVisibleProgress(this.conversationId, this.messages);
-      }
-    }, 2000); // 每 2 秒检查一次
   }
 
   /**

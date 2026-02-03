@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChatStack",
   "version": "1.1.0",
-  "description": "为 ChatGPT、Gemini 添加智能侧边栏：TOC、双层 Projects、书签、阅读进度",
+  "description": "为 ChatGPT、Gemini 添加智能侧边栏：TOC、双层 Projects、收藏",
   "permissions": [
     "storage"
   ],
@@ -32,10 +32,12 @@
         "core/i18n.js",
         "core/toc-manager.js",
         "core/project-manager.js",
-        "core/bookmark-manager.js",
-        "core/progress-manager.js",
         "content/platform-adapter.js",
         "content/chatgpt-adapter.js",
+        "content/html-to-markdown.js",
+        "content/sidebar-export.js",
+        "content/sidebar-toc.js",
+        "content/sidebar-filters.js",
         "content/sidebar.js",
         "content/content.js"
       ],
@@ -52,10 +54,12 @@
         "core/i18n.js",
         "core/toc-manager.js",
         "core/project-manager.js",
-        "core/bookmark-manager.js",
-        "core/progress-manager.js",
         "content/platform-adapter.js",
         "content/gemini-adapter.js",
+        "content/html-to-markdown.js",
+        "content/sidebar-export.js",
+        "content/sidebar-toc.js",
+        "content/sidebar-filters.js",
         "content/sidebar.js",
         "content/content.js"
       ],
