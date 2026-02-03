@@ -1,6 +1,6 @@
 /**
  * Projects 管理器 - 管理双层项目结构
- * 1. ChatGPT Projects (Auto) - 自动映射，只读
+ * 1. Auto Projects - 多平台自动映射，只读
  * 2. My Projects - 用户创建，可编辑
  */
 
@@ -8,7 +8,7 @@ class ProjectManager {
   constructor() {
     this.DEBUG = true;
     this.projects = {
-      chatgpt: {}, // { projectName: { conversations: [conversationId, ...] } }
+      auto: {}, // { 'Platform:slug': { name, conversations: [], platform } }
       my: {} // { projectId: { name, conversations: [], createdAt } }
     };
   }
@@ -36,101 +36,115 @@ class ProjectManager {
   }
 
   /**
-   * 映射会话到 ChatGPT 自动项目（按 slug 存，重命名时只更新 name，不新建分类）
+   * 映射会话到自动项目（多平台支持）
    * @param {string} conversationId
-   * @param {string|null} projectSlug - URL 中 /g/ 后第一段；无 /g/ 时传 null
-   * @param {string|null} projectName - 显示名，用于列表标题；重命名后传新名即可
+   * @param {string} platform - 平台名称：'ChatGPT' | 'Gemini' | ...
+   * @param {string|null} projectSlug - 项目标识符
+   * @param {string|null} projectName - 显示名
    */
-  async mapToChatGPTProject(conversationId, projectSlug, projectName) {
+  async mapToAutoProject(conversationId, platform, projectSlug, projectName) {
     const slug = (projectSlug && String(projectSlug).trim()) || null;
     const name = (projectName && String(projectName).trim()) || null;
+    const key = slug ? `${platform}:${slug}` : `${platform}:Inbox`;
 
-    // 记录当前会话所在的项目（改名导致 slug 变化时，用于合并旧项目到新 slug）
-    const oldKeysContainingConv = [];
-    Object.entries(this.projects.chatgpt).forEach(([k, project]) => {
-      if ((project.conversations || []).includes(conversationId)) oldKeysContainingConv.push(k);
-    });
-
-    // 从所有 ChatGPT 项目中移除该会话
-    Object.values(this.projects.chatgpt).forEach(project => {
+    // 从所有自动项目中移除该会话
+    Object.values(this.projects.auto).forEach(project => {
       project.conversations = (project.conversations || []).filter(id => id !== conversationId);
     });
 
-    if (!slug) {
-      this.cleanupEmptyChatGPTProjects();
-      await this.save();
-      this.log(`Conversation ${conversationId} not in a ChatGPT project, not added to Auto`);
-      return;
+    // 确保项目存在
+    if (!this.projects.auto[key]) {
+      this.projects.auto[key] = {
+        name: name || (slug || 'Inbox (Auto)'),
+        conversations: [],
+        platform: platform
+      };
     }
 
-    const isNewSlug = !this.projects.chatgpt[slug];
-    if (isNewSlug) {
-      this.projects.chatgpt[slug] = { name: name || slug, conversations: [] };
-    }
-    const project = this.projects.chatgpt[slug];
+    const project = this.projects.auto[key];
     if (name) project.name = name;
+    if (!project.platform) project.platform = platform;
 
-    // 若为新 slug 且当前会话此前只在一个旧项目中：视为 ChatGPT 项目改名，将旧项目下所有对话合并到新 slug 并删除旧项
-    if (isNewSlug && oldKeysContainingConv.length === 1) {
-      const oldKey = oldKeysContainingConv[0];
-      const oldProject = this.projects.chatgpt[oldKey];
-      if (oldProject && (oldProject.conversations || []).length > 0) {
-        const toMerge = [...(oldProject.conversations || [])];
-        toMerge.forEach(id => {
-          if (!project.conversations.includes(id)) project.conversations.push(id);
-        });
-        delete this.projects.chatgpt[oldKey];
-        this.log(`ChatGPT project renamed: merged ${oldKey} -> ${slug} (${toMerge.length} conversations)`);
-      }
-    }
+    // 添加会话到项目
     if (!project.conversations.includes(conversationId)) {
       project.conversations.push(conversationId);
     }
 
-    this.cleanupEmptyChatGPTProjects();
+    this.cleanupEmptyAutoProjects();
     await this.save();
-    this.log(`Mapped conversation ${conversationId} to ChatGPT project (slug: ${slug}, name: ${project.name})`);
+    this.log(`Mapped conversation ${conversationId} to ${platform} project: ${key}`);
   }
 
-  /** 移除对话数为 0 的自动分类（保留 Inbox (Auto)），避免重命名后留下空项 */
-  cleanupEmptyChatGPTProjects() {
-    const inbox = 'Inbox (Auto)';
-    Object.keys(this.projects.chatgpt).forEach((key) => {
-      const p = this.projects.chatgpt[key];
+  /**
+   * 兼容旧方法：映射到 ChatGPT 项目
+   */
+  async mapToChatGPTProject(conversationId, projectSlug, projectName) {
+    return this.mapToAutoProject(conversationId, 'ChatGPT', projectSlug, projectName);
+  }
+
+  /**
+   * 移除对话数为 0 的自动分类
+   */
+  cleanupEmptyAutoProjects() {
+    Object.keys(this.projects.auto).forEach((key) => {
+      const p = this.projects.auto[key];
       const count = (p && p.conversations && p.conversations.length) || 0;
-      if (key !== inbox && count === 0) {
-        delete this.projects.chatgpt[key];
+      // 保留 Inbox 项目
+      if (!key.endsWith(':Inbox') && count === 0) {
+        delete this.projects.auto[key];
       }
     });
   }
 
   /**
-   * 删除某个 ChatGPT 自动分类（key 为 slug 或 "Inbox (Auto)"）
-   * 删除即移除该分类及其下对话，不再归入任何自动项目（不放入 Inbox）
+   * 删除某个自动分类
+   * @param {string} key - 格式为 'Platform:slug'
    */
-  async deleteChatGPTProjectCategory(key) {
-    const project = this.projects.chatgpt[key];
+  async deleteAutoProjectCategory(key) {
+    const project = this.projects.auto[key];
     if (!project) return;
     const count = (project.conversations || []).length;
-    delete this.projects.chatgpt[key];
+    delete this.projects.auto[key];
     await this.save();
-    this.log(`Deleted ChatGPT project category: ${key}, ${count} conversations removed from Auto`);
+    this.log(`Deleted auto project category: ${key}, ${count} conversations removed`);
   }
 
   /**
-   * 仅从所有 ChatGPT 项目中移除会话（不加入 Inbox）
+   * 兼容旧方法
+   */
+  async deleteChatGPTProjectCategory(key) {
+    // 尝试新格式
+    if (this.projects.auto[key]) {
+      return this.deleteAutoProjectCategory(key);
+    }
+    // 尝试旧格式（ChatGPT:xxx）
+    const newKey = `ChatGPT:${key}`;
+    if (this.projects.auto[newKey]) {
+      return this.deleteAutoProjectCategory(newKey);
+    }
+  }
+
+  /**
+   * 从所有自动项目中移除会话
    * @param {string} conversationId
    */
-  async removeFromChatGPTProject(conversationId) {
+  async removeFromAutoProject(conversationId) {
     let changed = false;
-    Object.values(this.projects.chatgpt).forEach(project => {
+    Object.values(this.projects.auto).forEach(project => {
       const convs = project.conversations || [];
       const before = convs.length;
       project.conversations = convs.filter(id => id !== conversationId);
       if (project.conversations.length !== before) changed = true;
     });
     if (changed) await this.save();
-    this.log(`Removed conversation ${conversationId} from ChatGPT projects`);
+    this.log(`Removed conversation ${conversationId} from auto projects`);
+  }
+
+  /**
+   * 兼容旧方法
+   */
+  async removeFromChatGPTProject(conversationId) {
+    return this.removeFromAutoProject(conversationId);
   }
 
   /**
@@ -214,15 +228,42 @@ class ProjectManager {
   }
 
   /**
-   * 获取所有 ChatGPT 自动项目（key 为 slug 或 "Inbox (Auto)"，value 含 name 与 conversations）
-   * @returns {Object} { [key]: { name: string, conversations: string[] } }
+   * 获取所有自动项目
+   * @returns {Object} { [key]: { name, conversations: [], platform } }
    */
-  getChatGPTProjects() {
+  getAutoProjects() {
     const out = {};
-    Object.entries(this.projects.chatgpt).forEach(([k, p]) => {
-      out[k] = { name: p.name != null ? p.name : k, conversations: p.conversations || [] };
+    Object.entries(this.projects.auto).forEach(([k, p]) => {
+      out[k] = {
+        name: p.name != null ? p.name : k,
+        conversations: p.conversations || [],
+        platform: p.platform || 'ChatGPT' // 兼容旧数据
+      };
     });
     return out;
+  }
+
+  /**
+   * 按平台获取自动项目
+   * @param {string} platform
+   * @returns {Object}
+   */
+  getAutoProjectsByPlatform(platform) {
+    const all = this.getAutoProjects();
+    const filtered = {};
+    Object.entries(all).forEach(([k, v]) => {
+      if (v.platform === platform) {
+        filtered[k] = v;
+      }
+    });
+    return filtered;
+  }
+
+  /**
+   * 兼容旧方法
+   */
+  getChatGPTProjects() {
+    return this.getAutoProjectsByPlatform('ChatGPT');
   }
 
   /**
@@ -234,17 +275,24 @@ class ProjectManager {
   }
 
   /**
-   * 获取会话所属的 ChatGPT 项目名
+   * 获取会话所属的自动项目名
    * @param {string} conversationId
    * @returns {string|null}
    */
-  getChatGPTProjectForConversation(conversationId) {
-    for (const [key, project] of Object.entries(this.projects.chatgpt)) {
+  getAutoProjectForConversation(conversationId) {
+    for (const [key, project] of Object.entries(this.projects.auto)) {
       if ((project.conversations || []).includes(conversationId)) {
         return project.name != null ? project.name : key;
       }
     }
     return null;
+  }
+
+  /**
+   * 兼容旧方法
+   */
+  getChatGPTProjectForConversation(conversationId) {
+    return this.getAutoProjectForConversation(conversationId);
   }
 
   /**

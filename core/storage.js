@@ -129,9 +129,10 @@ class StorageManager {
   async getConversation(conversationId) {
     const defaultConv = {
       id: conversationId,
+      platform: null, // 'ChatGPT' | 'Gemini' | ... (多平台支持)
       messages: [],
       lastRead: null,
-      chatgptProject: null,
+      autoProject: null, // 原 chatgptProject，现支持多平台自动项目
       myProjects: [],
       bookmarks: [],
       favoriteMessageIds: [], // 目录里收藏的消息 id，与「用户/AI」联合筛选
@@ -228,9 +229,26 @@ class StorageManager {
    */
   async getAllProjects() {
     const result = await this.get('projects');
-    return result.projects || {
-      chatgpt: {}, // ChatGPT 自动项目: { projectName: { conversations: [] } }
-      my: {} // 用户项目: { projectId: { name, conversations: [], createdAt } }
+    const projects = result.projects || {};
+
+    // 兼容旧数据：将 chatgpt 迁移到 auto
+    if (projects.chatgpt && !projects.auto) {
+      projects.auto = {};
+      for (const [slug, data] of Object.entries(projects.chatgpt)) {
+        projects.auto[`ChatGPT:${slug}`] = {
+          ...data,
+          platform: 'ChatGPT'
+        };
+      }
+      delete projects.chatgpt;
+      // 保存迁移后的数据
+      await this.saveProjects(projects);
+      this.log('Migrated chatgpt projects to auto format');
+    }
+
+    return {
+      auto: projects.auto || {}, // 多平台自动项目: { 'Platform:slug': { name, conversations: [], platform } }
+      my: projects.my || {} // 用户项目: { projectId: { name, conversations: [], createdAt } }
     };
   }
 
