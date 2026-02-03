@@ -13,6 +13,10 @@ class BasePlatformAdapter {
     this.debounceDelay = 500; // ms
     this.lastMessageCount = 0;
     this.onMessagesUpdated = null; // 回调函数
+    // 当解析结果为空时是否保留上一轮消息（用于规避 DOM 短暂抖动）
+    this.keepMessagesOnEmpty = false;
+    this.maxEmptyParseStreak = 0; // 0=不限制；>0 表示允许空解析连续次数
+    this.emptyParseStreak = 0;
   }
 
   /**
@@ -177,6 +181,22 @@ class BasePlatformAdapter {
    */
   updateMessages(forceNotify = false) {
     const newMessages = this.parseMessages();
+    if (newMessages.length === 0) {
+      this.emptyParseStreak += 1;
+    } else {
+      this.emptyParseStreak = 0;
+    }
+
+    if (!forceNotify && this.keepMessagesOnEmpty && this.messages.length > 0 && newMessages.length === 0) {
+      const currentId = this.getConversationId ? this.getConversationId() : null;
+      const sameConversation = currentId && this.conversationId && currentId === this.conversationId;
+      const conversationUnclear = !currentId && this.conversationId;
+      const underStreakLimit = this.maxEmptyParseStreak <= 0 || this.emptyParseStreak <= this.maxEmptyParseStreak;
+      if ((sameConversation || conversationUnclear) && underStreakLimit) {
+        this.log('Empty parse result, keep previous messages to avoid flicker');
+        return;
+      }
+    }
 
     const countChanged = newMessages.length !== this.lastMessageCount;
     const prevLastLen = (this.messages.length && this.messages[this.messages.length - 1].content)
@@ -230,7 +250,9 @@ class BasePlatformAdapter {
         this.log('URL changed, new conversation:', this.conversationId);
 
         // 重置并重新解析
+        this.messages = [];
         this.lastMessageCount = 0;
+        this.emptyParseStreak = 0;
         this.updateMessages();
         this.scheduleDelayedParses();
       }

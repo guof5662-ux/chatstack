@@ -612,29 +612,9 @@
   color: var(--accent);
 }
 
-/* 导出/下载按钮：红色系高亮 */
+/* 导出图标按钮：与筛选按钮同款样式（灰底描边），红色仅用于导出栏内「下载」按钮 */
 .search-export-btn {
-  background: var(--export-red-bg);
-  border-color: var(--export-red-border);
-  color: var(--export-red);
-}
-
-.search-export-btn:hover {
-  background: var(--export-red-bg-hover);
-  border-color: var(--export-red-border-hover);
-  color: var(--export-red-hover);
-}
-
-.sidebar-container.dark .search-export-btn {
-  background: rgba(244, 63, 94, 0.12);
-  border-color: rgba(244, 63, 94, 0.5);
-  color: #be123c;
-}
-
-.sidebar-container.dark .search-export-btn:hover {
-  background: rgba(244, 63, 94, 0.2);
-  border-color: rgba(244, 63, 94, 0.7);
-  color: #9f1239;
+  /* 与 .search-filter-btn 一致，不单独设红底 */
 }
 
 .search-filter-btn .sidebar-icon {
@@ -1162,11 +1142,16 @@
   color: #f9fafb;
 }
 
-/* 对话列表 */
-.conversations-list {
+/* 对话列表（历史页按平台分组时使用） */
+.conversations-list,
+.conversations-by-platform {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+
+.conversations-by-platform {
+  display: block;
 }
 
 /* 对话卡片 */
@@ -1212,7 +1197,7 @@
 }
 
 .conv-card-title {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 400;
   color: #111827;
   line-height: 1.4;
@@ -1259,6 +1244,8 @@
   border-radius: 8px;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  position: relative;
+  z-index: 101;
 }
 
 .dark .export-bar {
@@ -1280,6 +1267,14 @@
   background: var(--export-red-bg-hover);
   border-color: var(--export-red-border-hover);
   color: var(--export-red-hover);
+}
+
+.export-bar .btn-primary:focus,
+.export-bar .btn-primary:focus-visible {
+  background: var(--export-red-bg);
+  border-color: var(--export-red-border);
+  color: var(--export-red);
+  outline: none;
 }
 
 .export-formats {
@@ -1528,7 +1523,7 @@
 }
 
 .conv-card-snippet {
-  font-size: 13px;
+  font-size: 12px;
   color: #6b7280;
   line-height: 1.5;
   margin-bottom: 10px;
@@ -1549,12 +1544,17 @@
   font-size: 12px;
 }
 
+.conv-card-meta .conv-card-info,
+.conv-card-meta .conv-card-time {
+  font-size: 12px;
+}
+
 .conv-card-match {
   padding: 2px 6px;
   border-radius: 999px;
   background: rgba(242, 210, 214, 0.6);
   color: #9a6a6f;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
 }
 
@@ -1564,11 +1564,28 @@
 }
 
 .conv-card-tag {
-  background: var(--accent);
-  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-bg);
+  color: var(--accent-dark);
   padding: 2px 8px;
   border-radius: 4px;
+  font-size: 12px;
   font-weight: 400;
+  border: 1px solid rgba(92, 141, 176, 0.25);
+}
+
+.conv-card-tag-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.conv-card-tag-text {
+  font-size: 12px;
 }
 
 .conv-card-info {
@@ -2468,12 +2485,31 @@
 
 .project-section-header {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   cursor: pointer;
   user-select: none;
   margin-bottom: 12px;
+}
+
+.project-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.project-section-hint {
+  font-size: 11px;
+  color: var(--sidebar-fg-secondary, #6b7280);
+  margin: 4px 0 0 0;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.project-section-collapsed .project-section-hint {
+  display: none;
 }
 
 .project-section-toggle {
@@ -2496,7 +2532,8 @@
   transform: rotate(-90deg);
 }
 
-.project-section-collapsed .project-list {
+.project-section-collapsed .project-list,
+.project-section-collapsed .auto-projects-container {
   display: none;
 }
 
@@ -2508,6 +2545,46 @@
 .dark .project-section-header:hover .project-section-toggle {
   background: rgba(255, 255, 255, 0.08);
   color: #f9fafb;
+}
+
+/* 平台项目：按平台分块 */
+.project-platform-block {
+  margin-bottom: 16px;
+}
+.project-platform-block:last-child {
+  margin-bottom: 0;
+}
+.project-platform-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sidebar-fg-secondary);
+  margin: 0 0 8px 0;
+}
+.project-platform-subtitle .project-section-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+/* 历史 · ChatGPT 区分「项目」与「你的聊天」 */
+.history-chatgpt-sections {
+  margin-top: 4px;
+}
+.history-chatgpt-section {
+  margin-bottom: 12px;
+}
+.history-chatgpt-section:last-child {
+  margin-bottom: 0;
+}
+.history-chatgpt-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sidebar-fg-secondary, #6b7280);
+  margin: 0 0 6px 0;
+  letter-spacing: 0.02em;
 }
 
 .project-header-create-btn {
@@ -2527,6 +2604,11 @@
   align-items: center;
   gap: 6px;
   margin-right: auto;
+}
+
+.project-section-title-row .project-section-title {
+  flex: 1;
+  min-width: 0;
 }
 
 .project-section-icon {

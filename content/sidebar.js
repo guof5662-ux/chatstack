@@ -35,7 +35,11 @@ class SidebarUI {
     this.projectsFilterPanelOpen = false;
     // 项目标签内视图状态：切到其他标签再切回时恢复（list | conversation）
     this.projectsViewState = { level: 'list', projectType: null, projectKey: null, conversationId: null, conversationTitle: null, searchKeyword: '' };
-    this.projectSectionCollapsed = { chatgpt: false, my: false };
+    this.projectSectionCollapsed = { auto: false, my: false };
+    // 历史页：记录已展开的项目，避免重渲染后自动收回
+    this.historyExpandedProjects = new Set();
+    // 项目页：记录已展开的项目，避免重渲染后自动收回
+    this.projectsExpandedItems = new Set();
     // 仅在同一会话首次加载时恢复阅读进度，避免 AI 回答完成后因消息更新再次执行导致滚回顶部
     this.progressRestoredForConversationId = null;
     // 上一轮 updateMessages 的会话 ID，用于区分「刚进入会话」与「同会话内打开侧栏/流式更新」从而避免打开插件时自动上滚
@@ -43,7 +47,7 @@ class SidebarUI {
     this.lastNonSettingsTab = 'toc';
     this.msgSearchPersist = null;
     // 导出模式状态
-    this.exportState = { active: false, scope: null, selected: new Set(), formats: { json: true, md: false, txt: false }, zip: true };
+    this.exportState = { active: false, scope: null, selected: new Set(), formats: { json: false, md: false, txt: false }, zip: false };
   }
 
   log(...args) {
@@ -101,6 +105,58 @@ class SidebarUI {
     return icons[name] || '';
   }
 
+  /**
+   * 根据平台和对话 ID 获取「在浏览器中打开」的 URL
+   * @param {string} platform - 平台名，如 ChatGPT / Gemini
+   * @param {string} conversationId - 对话 ID
+   * @param {string} [storedLink] - 保存时记录的对话页 URL，有则优先使用
+   * @returns {string}
+   */
+  getConversationOpenUrl(platform, conversationId, storedLink) {
+    if (storedLink && typeof storedLink === 'string' && storedLink.startsWith('http')) {
+      return storedLink;
+    }
+    const id = (conversationId || '').trim();
+    if (!id) return '';
+    const name = (platform || 'ChatGPT').trim();
+    if (name === 'Gemini') {
+      return `https://gemini.google.com/app/${id}`;
+    }
+    if (name === 'ChatGPT' || name === 'Claude') {
+      return `https://chatgpt.com/c/${id}`;
+    }
+    return `https://chatgpt.com/c/${id}`;
+  }
+
+  /**
+   * 在浏览器新标签页打开指定对话（会先拉取对话数据以获取 link/platform）
+   */
+  async openConversationInNewTab(conversationId) {
+    if (!conversationId) return;
+    try {
+      const conv = await window.storageManager.getConversation(conversationId);
+      const platform = (conv && conv.platform) ? conv.platform : 'ChatGPT';
+      const link = conv && conv.link ? conv.link : '';
+      const url = this.getConversationOpenUrl(platform, conversationId, link);
+      if (url) window.open(url, '_blank');
+    } catch (e) {
+      this.log('openConversationInNewTab error:', e);
+      const url = this.getConversationOpenUrl('ChatGPT', conversationId, '');
+      if (url) window.open(url, '_blank');
+    }
+  }
+
+  /** 根据平台名称返回平台 logo URL（用于历史/项目卡片） */
+  getPlatformIconUrl(platformName) {
+    const name = (platformName || '').trim() || 'ChatGPT';
+    const urls = {
+      ChatGPT: 'https://chatgpt.com/favicon.ico',
+      Gemini: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
+      Claude: 'https://www.anthropic.com/favicon.ico',
+    };
+    return urls[name] || urls.ChatGPT;
+  }
+
   getExportBarHTML(scope) {
     const id = `export-bar-${scope}`;
     const countId = `export-count-${scope}`;
@@ -108,10 +164,10 @@ class SidebarUI {
       <div class="export-bar" id="${id}" data-scope="${scope}" style="display: none;">
         <div class="export-formats">
           <span class="export-label" data-i18n="export.format">${this._t('export.format')}</span>
-          <label class="export-format"><input type="checkbox" data-format="json" checked> JSON</label>
+          <label class="export-format"><input type="checkbox" data-format="json"> JSON</label>
           <label class="export-format"><input type="checkbox" data-format="md"> MD</label>
           <label class="export-format"><input type="checkbox" data-format="txt"> TXT</label>
-          <label class="export-format export-zip"><input type="checkbox" data-zip checked> ${this._t('export.zip')}</label>
+          <label class="export-format export-zip"><input type="checkbox" data-zip> ${this._t('export.zip')}</label>
           <span class="export-count" id="${countId}">${this._t('export.selected', { n: '0' })}</span>
         </div>
         <div class="export-actions">
@@ -335,7 +391,7 @@ class SidebarUI {
             </div>
             ${this.getExportBarHTML('history')}
             <div id="conversations-list-container">
-              <ul class="conversations-list" id="conversations-list"></ul>
+              <div id="conversations-by-platform" class="conversations-by-platform"></div>
             </div>
             <div id="conversation-detail-container" style="display: none;">
               <div class="conv-detail-top">
@@ -413,19 +469,13 @@ class SidebarUI {
             </div>
           </div>
           ${this.getExportBarHTML('projects')}
-          <div class="project-section" id="auto-projects-section">
-            <div class="project-section-header" data-section="auto">
-              <h3 class="project-section-title" id="auto-projects-title">🤖 Auto Projects</h3>
-              <span class="project-section-toggle" aria-hidden="true">${this.getIcon('chevronDown')}</span>
-            </div>
-            <ul class="project-list" id="auto-projects-list"></ul>
-          </div>
-
-          <div class="project-section">
+          <div class="project-section" id="my-projects-section">
             <div class="project-section-header" data-section="my">
-              <h3 class="project-section-title">👤 My Projects</h3>
-              <button class="btn btn-primary btn-small project-header-create-btn" id="btn-create-project" data-i18n="project.create">+ 新建项目</button>
-              <span class="project-section-toggle" aria-hidden="true">${this.getIcon('chevronDown')}</span>
+              <div class="project-section-title-row">
+                <h3 class="project-section-title" data-i18n="project.myProjects">我创建的项目</h3>
+                <button class="btn btn-primary btn-small project-header-create-btn" id="btn-create-project" data-i18n="project.create">+ 新建项目</button>
+                <span class="project-section-toggle" aria-hidden="true">${this.getIcon('chevronDown')}</span>
+              </div>
             </div>
             <ul class="project-list" id="my-projects-list"></ul>
           </div>
@@ -1324,7 +1374,7 @@ async applySavedWidth() {
       header.addEventListener('click', () => {
         const section = header.getAttribute('data-section');
         if (!section) return;
-        const key = section === 'chatgpt' ? 'chatgpt' : 'my';
+        const key = section === 'auto' ? 'auto' : 'my';
         this.projectSectionCollapsed[key] = !this.projectSectionCollapsed[key];
         this.applyProjectSectionCollapsed();
       });
@@ -1462,6 +1512,28 @@ async applySavedWidth() {
       this.container.classList.add('export-mode');
       this.container.setAttribute('data-export-scope', scope);
     }
+    // 关闭可能打开的筛选面板，避免遮挡导出栏
+    if (scope === 'history') {
+      const convFilterPanel = this.shadowRoot.getElementById('conversations-filter-panel');
+      const btnConvFilter = this.shadowRoot.getElementById('btn-conversations-filter');
+      if (convFilterPanel) {
+        convFilterPanel.style.display = 'none';
+        this.conversationsFilterPanelOpen = false;
+      }
+      if (btnConvFilter) {
+        btnConvFilter.classList.toggle('active', this.hasActiveFilter());
+      }
+    } else if (scope === 'projects') {
+      const projFilterPanel = this.shadowRoot.getElementById('projects-filter-panel');
+      const btnProjFilter = this.shadowRoot.getElementById('btn-projects-filter');
+      if (projFilterPanel) {
+        projFilterPanel.style.display = 'none';
+        this.projectsFilterPanelOpen = false;
+      }
+      if (btnProjFilter) {
+        btnProjFilter.classList.toggle('active', this.hasActiveFilter());
+      }
+    }
     const bar = this.shadowRoot.getElementById(`export-bar-${scope}`);
     if (bar) bar.style.display = 'flex';
     this.syncExportFormatsToUI();
@@ -1535,11 +1607,11 @@ async applySavedWidth() {
     const scope = dot.getAttribute('data-scope');
     const type = dot.getAttribute('data-type');
     if (!scope || !type) return null;
-    if (scope === 'projects' && type === 'project') {
+    if (type === 'project') {
       const pType = dot.getAttribute('data-project-type');
       const pKey = dot.getAttribute('data-project-key');
       if (!pType || !pKey) return null;
-      return `projects:project:${pType}:${pKey}`;
+      return `${scope}:project:${pType}:${pKey}`;
     }
     const id = dot.getAttribute('data-id');
     if (!id) return null;
@@ -1652,6 +1724,7 @@ async applySavedWidth() {
       this.downloadBlob(blob, zipName);
       this.showToast(this._t('export.done'));
       this.selectAllInScope(this.exportState.scope);
+      this.resetExportDownloadButton();
       return;
     }
 
@@ -1662,6 +1735,21 @@ async applySavedWidth() {
     }
     this.showToast(this._t('export.done'));
     this.selectAllInScope(this.exportState.scope);
+    this.resetExportDownloadButton();
+  }
+
+  /**
+   * 下载完成后恢复「下载」按钮可点击与样式（失焦、去除 disabled）
+   */
+  resetExportDownloadButton() {
+    if (!this.exportState.scope) return;
+    const bar = this.shadowRoot.getElementById(`export-bar-${this.exportState.scope}`);
+    if (!bar) return;
+    const downloadBtn = bar.querySelector('button[data-action="download"]');
+    if (downloadBtn) {
+      downloadBtn.removeAttribute('disabled');
+      downloadBtn.blur();
+    }
   }
 
   async buildExportFiles(formats) {
@@ -1708,14 +1796,35 @@ async applySavedWidth() {
     const conv = await window.storageManager.getConversation(this.conversationId);
     const title = (conv && conv.title) || this._t('conv.defaultTitle');
     const base = this.safeFilename(`current_${title}_${this.conversationId.slice(0, 8)}_blocks`);
-    return this.buildMessageFiles(base, title, this.conversationId, selected, formats);
+    return this.buildMessageFiles(base, title, this.conversationId, selected, formats, undefined, conv);
   }
 
   async buildHistoryExportFiles(formats) {
-    const convIds = Array.from(this.exportState.selected)
-      .filter((k) => k.startsWith('history:conversation:'))
-      .map((k) => k.replace('history:conversation:', ''));
-    if (!convIds.length) return [];
+    const selected = Array.from(this.exportState.selected);
+    const projectKeys = selected.filter((k) => k.startsWith('history:project:'));
+    const convIds = new Set(
+      selected
+        .filter((k) => k.startsWith('history:conversation:'))
+        .map((k) => k.replace('history:conversation:', ''))
+    );
+    const folderMap = new Map();
+    if (projectKeys.length) {
+      const autoProjects = window.projectManager.getAutoProjects();
+      projectKeys.forEach((k) => {
+        const parts = k.split(':');
+        const pType = parts[2];
+        const pKey = parts.slice(3).join(':');
+        if (pType !== 'auto') return;
+        const project = autoProjects[pKey];
+        if (!project) return;
+        const projectName = project.name || pKey;
+        (project.conversations || []).forEach((id) => {
+          convIds.add(id);
+          if (!folderMap.has(id)) folderMap.set(id, projectName);
+        });
+      });
+    }
+    if (!convIds.size) return [];
     const files = [];
     for (const id of convIds) {
       const conv = await window.storageManager.getConversation(id);
@@ -1727,7 +1836,8 @@ async applySavedWidth() {
         contentHtml: m.contentHtml || null
       }));
       const base = this.safeFilename(`${title}_${id.slice(0, 8)}`);
-      files.push(...this.buildMessageFiles(base, title, id, messages, formats));
+      const folderName = folderMap.get(id);
+      files.push(...this.buildMessageFiles(base, title, id, messages, formats, folderName, conv));
     }
     return files;
   }
@@ -1765,21 +1875,27 @@ async applySavedWidth() {
       }));
       const base = this.safeFilename(`${title}_${id.slice(0, 8)}`);
       const folder = folderMap.get(id);
-      files.push(...this.buildMessageFiles(base, title, id, messages, formats, folder));
+      files.push(...this.buildMessageFiles(base, title, id, messages, formats, folder, conv));
     }
     return files;
   }
 
-  buildMessageFiles(baseName, title, conversationId, messages, formats, folderName) {
+  buildMessageFiles(baseName, title, conversationId, messages, formats, folderName, conv) {
     const files = [];
     const prefix = folderName ? this.safeFilename(folderName) + '/' : '';
-    const site = 'ChatGPT';
-    const url = conversationId ? `${window.location.origin}/c/${conversationId}` : '';
+    const platform = (conv && conv.platform) ? conv.platform : 'ChatGPT';
+    const site = platform;
+    const url = conversationId
+      ? this.getConversationOpenUrl(platform, conversationId, (conv && conv.link) ? conv.link : '')
+      : '';
     const exportedAt = new Date().toISOString();
     if (formats.includes('json')) {
       const data = {
         id: conversationId,
         title,
+        site,
+        url,
+        exported: exportedAt,
         messages: messages.map((m) => ({
           index: m.index,
           role: m.role,
@@ -1832,17 +1948,41 @@ async applySavedWidth() {
     return files;
   }
 
+  /**
+   * 导出前去掉搜索高亮标记，避免导出文件里出现黄色高亮框
+   */
+  stripHighlightMarkupForExport(html) {
+    if (!html || typeof html !== 'string') return html || '';
+    let cleaned = html;
+    
+    // 1. 去除所有 <mark> 标签（不管有没有属性）
+    cleaned = cleaned.replace(/<mark[^>]*>([\s\S]*?)<\/mark>/gi, '$1');
+    
+    // 2. 去除带有 highlight 相关 class 的 span 标签
+    cleaned = cleaned.replace(/<span[^>]*class="[^"]*highlight[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '$1');
+    
+    // 3. 去除带有背景色样式的 span 标签（常见的高亮实现方式）
+    cleaned = cleaned.replace(/<span[^>]*style="[^"]*background[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '$1');
+    
+    // 4. 去除空的 span 标签
+    cleaned = cleaned.replace(/<span[^>]*>\s*<\/span>/gi, '');
+    
+    return cleaned;
+  }
+
   getMessageHtmlForExport(message) {
-    if (message && message.contentHtml && message.contentHtml.trim()) return message.contentHtml;
-    if (message && message.element) {
+    let html = '';
+    if (message && message.contentHtml && message.contentHtml.trim()) html = message.contentHtml;
+    else if (message && message.element) {
       try {
-        const html = this.extractMessageHTMLForDisplay(message.element);
-        if (html && html.trim()) return html;
+        const extracted = this.extractMessageHTMLForDisplay(message.element);
+        if (extracted && extracted.trim()) html = extracted;
       } catch (e) {
         this.log('getMessageHtmlForExport error:', e);
       }
     }
-    return this.wrapPlainTextAsHtml((message && message.content) || '');
+    if (!html) return this.wrapPlainTextAsHtml((message && message.content) || '');
+    return this.stripHighlightMarkupForExport(html);
   }
 
   wrapPlainTextAsHtml(text) {
@@ -2005,9 +2145,8 @@ async applySavedWidth() {
     const s = this.projectsViewState;
     if (!s || s.level !== 'conversation' || !s.conversationId || !s.projectType || !s.projectKey) return;
 
-    const chatgptList = this.shadowRoot.getElementById('auto-projects-list');
     const myList = this.shadowRoot.getElementById('my-projects-list');
-    const containers = [chatgptList, myList].filter(Boolean);
+    const containers = [myList].filter(Boolean);
     let item = null;
     for (const c of containers) {
       const found = Array.from(c.querySelectorAll('.project-item')).find(
@@ -2178,6 +2317,7 @@ async applySavedWidth() {
   async saveCurrentConversationSnapshot() {
     if (!this.conversationId || !this.messages || this.messages.length === 0) return;
     try {
+      const platform = window.platformAdapter ? window.platformAdapter.getPlatformName() : 'Unknown';
       const firstUserContent = (this.messages.find(m => m.role === 'user') || {}).content || '';
       const pageTitle = window.platformAdapter && window.platformAdapter.getConversationTitleFromPage && window.platformAdapter.getConversationTitleFromPage();
       const title = (pageTitle && pageTitle.trim()) ? pageTitle.trim() : (window.tocManager ? window.tocManager.generateTitle(firstUserContent) : this._t('conv.defaultTitle'));
@@ -2198,11 +2338,12 @@ async applySavedWidth() {
       });
       const convData = await window.storageManager.getConversation(this.conversationId);
       convData.favoriteMessageIds = convData.favoriteMessageIds || [];
-      Object.assign(convData, { title, snippet, messageCount, lastSeenAt, messages: messagesData });
+      const link = typeof window !== 'undefined' && window.location && window.location.href ? window.location.href : '';
+      Object.assign(convData, { title, snippet, messageCount, lastSeenAt, messages: messagesData, platform, link });
       await window.storageManager.saveConversation(this.conversationId, convData);
       let list = await window.storageManager.getConversationList();
       const existing = list.findIndex(item => item.id === this.conversationId);
-      const entry = { id: this.conversationId, title, snippet, messageCount, lastSeenAt };
+      const entry = { id: this.conversationId, title, snippet, messageCount, lastSeenAt, platform, link };
       if (existing >= 0) list[existing] = entry;
       else list.unshift(entry);
       list.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
@@ -2218,6 +2359,7 @@ async applySavedWidth() {
     if (tocItems.length === 0) {
       tocList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">' + this._t('empty.noMessages') + '</div></div>';
       this.updateTocSummary(0, 0, 0, false);
+      this.updateOpenInPlatformButtonText(window.platformAdapter ? window.platformAdapter.getPlatformName() : 'ChatGPT');
       return;
     }
     if (this.tocFilterRole !== 'all') tocItems = tocItems.filter((item) => item.role === this.tocFilterRole);
@@ -2300,11 +2442,7 @@ async applySavedWidth() {
         mainClickArea.addEventListener('click', (e) => {
           // 如果点击的是按钮，不触发跳转
           if (e.target.closest('.toc-expand-text-btn')) return;
-          if (this.exportState.active && this.exportState.scope === 'toc') {
-            const dot = li.querySelector('.export-select-dot');
-            if (dot) this.toggleExportSelectionFromDot(dot);
-            return;
-          }
+          if (this.exportState.active && this.exportState.scope === 'toc') return;
           window.tocManager.jumpToMessage(messageId);
         });
         mainClickArea.style.cursor = 'pointer';
@@ -2333,10 +2471,19 @@ async applySavedWidth() {
       ((kw || '').trim().length > 0);
     this.updateTocSummary(tocItems.length, userCount, aiCount, isFiltered);
     this.updateTocFilterButtons();
+    this.updateOpenInPlatformButtonText(window.platformAdapter ? window.platformAdapter.getPlatformName() : 'ChatGPT');
     this.log('TOC rendered:', tocItems.length, 'items');
     if (this.exportState.active && this.exportState.scope === 'toc') {
       this.syncExportSelectionUI();
     }
+  }
+
+  /** 根据当前或指定平台更新「在 X 中打开」按钮文案 */
+  updateOpenInPlatformButtonText(platformName) {
+    const btn = this.shadowRoot.getElementById('btn-open-conv');
+    if (!btn) return;
+    const name = (platformName || '').trim() || 'ChatGPT';
+    btn.textContent = this._t('action.openInPlatform', { platform: name });
   }
 
   updateTocSummary(total, userCount, aiCount, isFiltered) {
@@ -2798,7 +2945,7 @@ async applySavedWidth() {
     html = this.stripMediaElements(html);
     html = this.deduplicateMediaBySrc(html);
 
-    return html || '<p class="toc-expanded-empty">无内容</p>';
+    return html || '';
   }
 
   /**
@@ -3095,6 +3242,12 @@ async applySavedWidth() {
         Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
         return children.length ? [{ type: 'link', href, children }] : [];
       }
+      // 忽略 mark 和 span 等高亮标签，直接提取内容
+      if (tag === 'mark' || tag === 'span') {
+        const tokens = [];
+        Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
+        return tokens;
+      }
       const tokens = [];
       Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
       return tokens;
@@ -3236,7 +3389,8 @@ async applySavedWidth() {
     const parts = tokens.map((t) => {
       if (t.type === 'text') return t.value;
       if (t.type === 'br') return '\n';
-      if (t.type === 'code') return '`' + t.value + '`';
+      // 导出 MD 时不保留行内 code 的反引号，避免出现黄色高亮框
+      if (t.type === 'code') return t.value;
       if (t.type === 'strong') return '**' + this.renderInlineToMarkdown(t.children) + '**';
       if (t.type === 'em') return '*' + this.renderInlineToMarkdown(t.children) + '*';
       if (t.type === 'link') {
@@ -3252,7 +3406,8 @@ async applySavedWidth() {
     const parts = tokens.map((t) => {
       if (t.type === 'text') return t.value;
       if (t.type === 'br') return '\n';
-      if (t.type === 'code') return '`' + t.value + '`';
+      // TXT 也输出纯文本，避免多余标记
+      if (t.type === 'code') return t.value;
       if (t.type === 'strong' || t.type === 'em') return this.renderInlineToText(t.children);
       if (t.type === 'link') {
         const text = this.renderInlineToText(t.children);
@@ -3407,7 +3562,7 @@ async applySavedWidth() {
   async renderConversationsList() {
     const listContainer = this.shadowRoot.getElementById('conversations-list-container');
     const detailContainer = this.shadowRoot.getElementById('conversation-detail-container');
-    const listEl = this.shadowRoot.getElementById('conversations-list');
+    const listEl = this.shadowRoot.getElementById('conversations-by-platform');
 
     if (!listContainer || !listEl) return;
 
@@ -3427,159 +3582,207 @@ async applySavedWidth() {
     if (convDetailSearchEl) convDetailSearchEl.oninput = null;
 
     try {
-      let list = await window.storageManager.getConversationList() || [];
+      const autoProjects = window.projectManager.getAutoProjects();
+      const list = await window.storageManager.getConversationList() || [];
+      const listById = {};
+      list.forEach((item) => { listById[item.id] = item; });
 
       const { start: rangeStart, end: rangeEnd } = this.getFilterDateRange();
-      if (rangeStart != null && rangeEnd != null) {
-        list = list.filter((item) => {
-          const t = item.lastSeenAt || 0;
-          return t >= rangeStart && t <= rangeEnd;
-        });
-      }
-      if (this.tocFilterPlatforms && this.tocFilterPlatforms.length > 0) {
-        list = list.filter((item) => {
-          const platform = item.platform || 'ChatGPT';
-          return this.tocFilterPlatforms.includes(platform);
-        });
-      }
       const kw = (this.conversationsSearchKeyword || '').trim();
       const kwLower = kw.toLowerCase();
-      if (kw) {
-        list = list.map((item) => {
-          const title = (item.title || '').toLowerCase();
-          const snippet = (item.snippet || '').toLowerCase();
-          return {
-            ...item,
-            _titleMatch: title.includes(kwLower),
-            _snippetMatch: snippet.includes(kwLower),
-            _contentMatchCount: 0
-          };
-        });
-        const titleSnippetMatches = list.filter((item) => item._titleMatch || item._snippetMatch);
-        const rest = list.filter((item) => !item._titleMatch && !item._snippetMatch);
-        if (rest.length > 0) {
-          listEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">' + this._t('empty.searching') + '</div></div>';
-          const contentMatches = [];
-          for (const item of rest) {
-            try {
-              const conv = await window.storageManager.getConversation(item.id);
-              const messages = conv.messages || [];
-              let count = 0;
-              messages.forEach((m) => {
-                if ((m.content || '').toLowerCase().includes(kwLower)) count++;
-              });
-              if (count > 0) {
-                item._contentMatchCount = count;
-                contentMatches.push(item);
-              }
-            } catch (e) {
-              this.log('content search getConversation error:', e);
-            }
-          }
-          const combined = [...titleSnippetMatches, ...contentMatches];
-          combined.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
-          list = combined;
-        } else {
-          list = titleSnippetMatches;
-        }
-      }
 
-      if (!list || list.length === 0) {
+      const filterEntriesForHistory = async (convIds) => {
+        let entries = convIds.map((id) => listById[id]).filter(Boolean);
+        if (rangeStart != null && rangeEnd != null) {
+          entries = entries.filter((item) => {
+            const t = item.lastSeenAt || 0;
+            return t >= rangeStart && t <= rangeEnd;
+          });
+        }
+        if (this.tocFilterPlatforms && this.tocFilterPlatforms.length > 0) {
+          entries = entries.filter((item) => {
+            const platform = item.platform || 'ChatGPT';
+            return this.tocFilterPlatforms.includes(platform);
+          });
+        }
+        if (kwLower) {
+          entries = entries.map((item) => ({
+            ...item,
+            _titleMatch: (item.title || '').toLowerCase().includes(kwLower),
+            _snippetMatch: (item.snippet || '').toLowerCase().includes(kwLower),
+            _contentMatchCount: 0
+          }));
+          if (entries.length > 0) {
+            await Promise.all(entries.map(async (item) => {
+              try {
+                const conv = await window.storageManager.getConversation(item.id);
+                const messages = conv.messages || [];
+                let count = 0;
+                messages.forEach((m) => {
+                  if ((m.content || '').toLowerCase().includes(kwLower)) count++;
+                });
+                item._contentMatchCount = count;
+              } catch (e) {
+                this.log('history content match error:', e);
+                item._contentMatchCount = 0;
+              }
+            }));
+          }
+          entries = entries.filter((item) => item._titleMatch || item._snippetMatch || item._contentMatchCount > 0);
+        }
+        return entries.sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+      };
+
+      const byPlatform = {};
+      Object.entries(autoProjects).forEach(([key, project]) => {
+        const platform = project.platform || 'ChatGPT';
+        if (!byPlatform[platform]) byPlatform[platform] = [];
+        byPlatform[platform].push({ key, project });
+      });
+
+      if (Object.keys(byPlatform).length === 0) {
         const emptyText = this.hasActiveFilter() ? this._t('empty.noFilterResults') : this._t('empty.noConversations');
         listEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">' + emptyText.replace(/\n/g, '<br>') + '</div></div>';
+        if (this.exportState.active && this.exportState.scope === 'history') this.syncExportSelectionUI();
         return;
       }
 
-      const renderList = list.slice(0, 50);
-      if (kw) {
-        await Promise.all(renderList.map(async (item) => {
-          try {
-            const conv = await window.storageManager.getConversation(item.id);
-            const messages = conv.messages || [];
-            let count = 0;
-            messages.forEach((m) => {
-              if ((m.content || '').toLowerCase().includes(kwLower)) count++;
-            });
-            item._contentMatchCount = count;
-          } catch (e) {
-            this.log('content match count error:', e);
-            if (item._contentMatchCount == null) item._contentMatchCount = 0;
+      const noConvs = this._t('project.noConvs');
+      const buildCardListHtml = (entries) => {
+        if (entries.length === 0) return `<ul class="project-conv-list-view"><li class="project-conv-empty">${this.escapeHtml(noConvs)}</li></ul>`;
+        return `<ul class="project-conv-list-view">${entries
+          .map((item) => {
+            const titleText = (item.title || this._t('conv.defaultTitle')).slice(0, 36);
+            const snippetText = (item.snippet || '').slice(0, 100);
+            const titleHtml = kwLower ? this.highlightKeywordInText(titleText, kw) : this.escapeHtml(titleText);
+            const snippetHtml = kwLower ? this.highlightKeywordInText(snippetText, kw) : this.escapeHtml(snippetText);
+            const showContentMatch = kwLower && item._contentMatchCount > 0;
+            const matchText = showContentMatch ? this._t('conv.contentMatches', { n: String(item._contentMatchCount) }) : '';
+            const platformName = item.platform || 'ChatGPT';
+            const platformTag = this.escapeHtml(platformName);
+            const pIconUrl = this.getPlatformIconUrl(platformName);
+            return `
+                <li class="conv-card" data-conversation-id="${this.escapeHtml(item.id)}">
+                  <button type="button" class="export-select-dot" data-scope="history" data-type="conversation" data-id="${this.escapeHtml(item.id)}" aria-label="${this._t('export.select')}"></button>
+                  <div class="conv-card-header">
+                    <div class="conv-card-title conv-card-title-editable" title="${this.escapeHtml(this._t('conv.editTitleHint'))}">${titleHtml}</div>
+                    <div class="conv-card-actions">
+                      <button type="button" class="conv-card-action" data-action="open" title="${this.escapeHtml(this._t('conv.openInNewTab'))}">${this.getIcon('external')}</button>
+                      <button type="button" class="conv-card-action" data-action="add-to-project" title="${this.escapeHtml(this._t('filter.addToProject'))}">${this.getIcon('folderAdd')}</button>
+                      <button type="button" class="conv-card-action conv-card-action--delete" data-action="delete" title="${this.escapeHtml(this._t('conv.delete'))}">${this.getIcon('trash')}</button>
+                    </div>
+                  </div>
+                  <div class="conv-card-snippet">${snippetHtml}</div>
+                  <div class="conv-card-meta">
+                    <span class="conv-card-tag">
+                      <img src="${this.escapeHtml(pIconUrl)}" alt="" class="conv-card-tag-icon" />
+                      <span class="conv-card-tag-text">${platformTag}</span>
+                    </span>
+                    ${showContentMatch ? `<span class="conv-card-match">${this.escapeHtml(matchText)}</span>` : ''}
+                    <span class="conv-card-info">💬 ${item.messageCount || 0}</span>
+                    <span class="conv-card-time">${this.formatTimeAgo(item.lastSeenAt)}</span>
+                  </div>
+                </li>`;
+          })
+          .join('')}</ul>`;
+      };
+      const buildProjectItemHtml = (key, name, filteredEntries, showDeleteBtn, expandByDefault) => {
+        const cardListHtml = buildCardListHtml(filteredEntries);
+        const convListSection = filteredEntries.length === 0
+          ? `<ul class="project-conversations"><li class="project-conv-empty">${this.escapeHtml(noConvs)}</li></ul>`
+          : `<div class="project-conversations">${cardListHtml}</div>`;
+        const deleteBtn = showDeleteBtn ? `<button type="button" class="project-header-action" data-action="delete-project" title="${this.escapeHtml(this._t('project.removeCategory'))}">${this.getIcon('trash')}</button>` : '';
+        const expandedClass = expandByDefault ? ' expanded' : '';
+        return `
+        <li class="project-item${expandedClass}" data-project-type="auto" data-project-key="${this.escapeHtml(key)}">
+          <div class="project-item-header">
+            <span class="project-expand-icon">▶</span>
+            <button type="button" class="export-select-dot" data-scope="history" data-type="project" data-project-type="auto" data-project-key="${this.escapeHtml(key)}" aria-label="${this._t('export.select')}"></button>
+            <div class="project-name">
+              <span>${this.escapeHtml(name)}</span>
+              <span class="project-count">${filteredEntries.length}</span>
+            </div>
+            <div class="project-item-header-actions">${deleteBtn}</div>
+          </div>
+          ${convListSection}
+        </li>`;
+      };
+
+      const platformOrder = ['ChatGPT', 'Gemini', 'Claude'];
+      const platformBlocks = [];
+      for (const platform of platformOrder) {
+        const plist = byPlatform[platform];
+        if (!plist || plist.length === 0) continue;
+        const platformTitle = this._t('project.projectsInPlatform', { platform });
+        const platformIconUrl = this.getPlatformIconUrl(platform);
+
+        if (platform === 'ChatGPT') {
+          const chatgptProjects = plist.filter(({ key }) => key !== 'ChatGPT:Inbox');
+          const chatgptInbox = plist.find(({ key }) => key === 'ChatGPT:Inbox');
+          const projectsSectionItems = [];
+          for (const { key, project } of chatgptProjects) {
+            const name = project.name || key;
+            const filteredEntries = await filterEntriesForHistory(project.conversations || []);
+            if (kwLower && filteredEntries.length === 0 && !name.toLowerCase().includes(kwLower)) continue;
+            const expandBySearch = !!(kwLower && (filteredEntries.length > 0 || name.toLowerCase().includes(kwLower)));
+            projectsSectionItems.push(buildProjectItemHtml(key, name, filteredEntries, true, expandBySearch));
           }
-        }));
+          let yourChatsSectionHtml = '';
+          if (chatgptInbox) {
+            const inboxProject = chatgptInbox.project;
+            const filteredInbox = await filterEntriesForHistory(inboxProject.conversations || []);
+            if (!kwLower || filteredInbox.length > 0 || (kwLower && '你的聊天'.toLowerCase().includes(kwLower))) {
+              const yourChatsLabel = this._t('history.chatgpt.yourChats');
+              const expandBySearch = !!(kwLower && filteredInbox.length > 0);
+              yourChatsSectionHtml = buildProjectItemHtml('ChatGPT:Inbox', yourChatsLabel, filteredInbox, false, expandBySearch);
+            }
+          }
+          const projectsTitle = this._t('history.chatgpt.projects');
+          const yourChatsTitle = this._t('history.chatgpt.yourChats');
+          const hasProjects = projectsSectionItems.length > 0;
+          const hasYourChats = yourChatsSectionHtml !== '';
+          if (!hasProjects && !hasYourChats && kwLower) continue;
+          platformBlocks.push(`
+          <div class="project-platform-block" data-platform="ChatGPT">
+            <h4 class="project-platform-subtitle"><img class="project-section-icon" alt="" src="${this.escapeHtml(platformIconUrl)}" />${this.escapeHtml(platformTitle)}</h4>
+            <div class="history-chatgpt-sections">
+              <div class="history-chatgpt-section">
+                <h5 class="history-chatgpt-section-title">${this.escapeHtml(projectsTitle)}</h5>
+                <ul class="project-list">${hasProjects ? projectsSectionItems.join('') : '<li class="project-conv-empty">' + this.escapeHtml(this._t('empty.noFilterProjects')) + '</li>'}</ul>
+              </div>
+              <div class="history-chatgpt-section">
+                <h5 class="history-chatgpt-section-title">${this.escapeHtml(yourChatsTitle)}</h5>
+                <ul class="project-list">${hasYourChats ? yourChatsSectionHtml : '<li class="project-conv-empty">' + this.escapeHtml(noConvs) + '</li>'}</ul>
+              </div>
+            </div>
+          </div>`);
+        } else {
+          const projectItems = [];
+          for (const { key, project } of plist) {
+            const isInbox = key === `${platform}:Inbox`;
+            const name = isInbox ? this._t('history.chatgpt.yourChats') : (project.name || key);
+            const filteredEntries = await filterEntriesForHistory(project.conversations || []);
+            if (kwLower && filteredEntries.length === 0 && !name.toLowerCase().includes(kwLower)) continue;
+            const expandBySearch = !!(kwLower && (filteredEntries.length > 0 || name.toLowerCase().includes(kwLower)));
+            projectItems.push(buildProjectItemHtml(key, name, filteredEntries, !isInbox, expandBySearch));
+          }
+          if (projectItems.length === 0 && kwLower) continue;
+          platformBlocks.push(`
+          <div class="project-platform-block" data-platform="${this.escapeHtml(platform)}">
+            <h4 class="project-platform-subtitle"><img class="project-section-icon" alt="" src="${this.escapeHtml(platformIconUrl)}" />${this.escapeHtml(platformTitle)}</h4>
+            <ul class="project-list">${projectItems.length ? projectItems.join('') : '<li class="project-conv-empty">' + this.escapeHtml(this._t('empty.noFilterProjects')) + '</li>'}</ul>
+          </div>`);
+        }
       }
 
-      // 使用新的卡片样式
-      listEl.innerHTML = renderList.map(item => {
-        const titleText = (item.title || this._t('conv.defaultTitle')).slice(0, 36);
-        const snippetText = (item.snippet || '').slice(0, 100);
-        const titleHtml = kw ? this.highlightKeywordInText(titleText, kw) : this.escapeHtml(titleText);
-        const snippetHtml = kw ? this.highlightKeywordInText(snippetText, kw) : this.escapeHtml(snippetText);
-        const showContentMatch = kw && item._contentMatchCount > 0;
-        const matchText = showContentMatch ? this._t('conv.contentMatches', { n: String(item._contentMatchCount) }) : '';
-        return `
-        <li class="conv-card" data-conversation-id="${this.escapeHtml(item.id)}">
-          <button type="button" class="export-select-dot" data-scope="history" data-type="conversation" data-id="${this.escapeHtml(item.id)}" aria-label="${this._t('export.select')}"></button>
-          <div class="conv-card-header">
-            <div class="conv-card-title conv-card-title-editable" title="${this._t('conv.editTitleHint')}">${titleHtml}</div>
-            <div class="conv-card-actions">
-              <button type="button" class="conv-card-action" data-action="open" title="${this._t('conv.openInNewTab')}">${this.getIcon('external')}</button>
-              <button type="button" class="conv-card-action" data-action="add-to-project" title="${this._t('filter.addToProject')}">${this.getIcon('folderAdd')}</button>
-              <button type="button" class="conv-card-action conv-card-action--delete" data-action="delete" title="${this._t('conv.delete')}">${this.getIcon('trash')}</button>
-            </div>
-          </div>
-          <div class="conv-card-snippet">${snippetHtml}</div>
-          <div class="conv-card-meta">
-            <span class="conv-card-tag">ChatGPT</span>
-            ${showContentMatch ? `<span class="conv-card-match">${this.escapeHtml(matchText)}</span>` : ''}
-            <span class="conv-card-info">💬 ${item.messageCount || 0}</span>
-            <span class="conv-card-time">${this.formatTimeAgo(item.lastSeenAt)}</span>
-          </div>
-        </li>
-      `;}).join('');
-
-      // 绑定卡片事件
-      listEl.querySelectorAll('.conv-card').forEach(card => {
-        const convId = card.getAttribute('data-conversation-id');
-
-        // 点击卡片 -> 显示详情（点击标题区域不进入，留作双击修改标题）
-        card.addEventListener('click', (e) => {
-          if (this.exportState.active && this.exportState.scope === 'history') {
-            if (e.target.closest('.export-select-dot')) return;
-            const dot = card.querySelector('.export-select-dot');
-            if (dot) this.toggleExportSelectionFromDot(dot);
-            return;
-          }
-          if (e.target.closest('.conv-card-action')) return;
-          if (e.target.closest('.conv-card-title')) return;
-          this.renderConversationDetailInToc(convId);
-        });
-
-        // 双击标题修改
-        card.querySelector('.conv-card-title')?.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          if (this.exportState.active && this.exportState.scope === 'history') return;
-          this.editConversationTitle(convId, card);
-        });
-        // 操作按钮
-        card.querySelectorAll('.conv-card-action').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (this.exportState.active && this.exportState.scope === 'history') {
-              const dot = card.querySelector('.export-select-dot');
-              if (dot) this.toggleExportSelectionFromDot(dot);
-              return;
-            }
-            const action = btn.getAttribute('data-action');
-            if (action === 'open') {
-              window.open(window.location.origin + '/c/' + convId, '_blank');
-            } else if (action === 'add-to-project') {
-              this.showAddToProjectDialog(convId);
-            } else if (action === 'delete') {
-              this.deleteConversation(convId);
-            }
-          });
-        });
-      });
+      if (platformBlocks.length === 0) {
+        const emptyText = this.hasActiveFilter() ? this._t('empty.noFilterResults') : this._t('empty.noConversations');
+        listEl.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💬</div><div class="empty-state-text">' + emptyText.replace(/\n/g, '<br>') + '</div></div>';
+      } else {
+        listEl.innerHTML = platformBlocks.join('');
+        this.bindHistoryPlatformEvents(listEl);
+        this.applyHistoryExpandedState(listEl);
+      }
 
       if (this.exportState.active && this.exportState.scope === 'history') {
         this.syncExportSelectionUI();
@@ -3587,6 +3790,93 @@ async applySavedWidth() {
     } catch (e) {
       listEl.innerHTML = '<div class="empty-state"><div class="empty-state-text">' + this._t('empty.loadFailed') + '</div></div>';
     }
+  }
+
+  /**
+   * 绑定历史页「按平台/项目分组」的展开与卡片事件（点击卡片进入全局详情）
+   */
+  bindHistoryPlatformEvents(container) {
+    if (!container) return;
+    container.querySelectorAll('.project-item').forEach((item) => {
+      const header = item.querySelector('.project-item-header');
+      const key = item.getAttribute('data-project-key');
+      if (!header) return;
+      header.onclick = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (e.target.closest('.project-item-header-actions')) return;
+        if (this.exportState.active && this.exportState.scope === 'history') {
+          if (e.target.closest('.export-select-dot')) return;
+          item.classList.toggle('expanded');
+          this.updateHistoryExpandedState(key, item.classList.contains('expanded'));
+          return;
+        }
+        item.classList.toggle('expanded');
+        this.updateHistoryExpandedState(key, item.classList.contains('expanded'));
+      };
+      item.querySelectorAll('.project-header-action[data-action="delete-project"]').forEach((btn) => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const displayName = key;
+          const ok = await this.showConfirmDialog(this._t('confirm.title'), this._t('confirm.removeCategory.message', { name: displayName }));
+          if (!ok) return;
+          await window.projectManager.deleteChatGPTProjectCategory(key);
+          this.renderConversationsList();
+        });
+      });
+      const listView = item.querySelector('.project-conv-list-view');
+      if (listView) {
+        listView.querySelectorAll('.conv-card').forEach((card) => {
+          const convId = card.getAttribute('data-conversation-id');
+          card.addEventListener('click', (e) => {
+            if (this.exportState.active && this.exportState.scope === 'history') {
+              if (e.target.closest('.export-select-dot')) return;
+              const dot = card.querySelector('.export-select-dot');
+              if (dot) this.toggleExportSelectionFromDot(dot);
+              return;
+            }
+            if (e.target.closest('.conv-card-action')) return;
+            if (e.target.closest('.conv-card-title')) return;
+            this.renderConversationDetailInToc(convId);
+          });
+          card.querySelector('.conv-card-title')?.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            if (this.exportState.active && this.exportState.scope === 'history') return;
+            this.editConversationTitle(convId, card);
+          });
+          card.querySelectorAll('.conv-card-action').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (this.exportState.active && this.exportState.scope === 'history') {
+                const dot = card.querySelector('.export-select-dot');
+                if (dot) this.toggleExportSelectionFromDot(dot);
+                return;
+              }
+              const action = btn.getAttribute('data-action');
+              if (action === 'open') this.openConversationInNewTab(convId);
+              else if (action === 'add-to-project') this.showAddToProjectDialog(convId);
+              else if (action === 'delete') this.deleteConversation(convId);
+            });
+          });
+        });
+      }
+    });
+  }
+
+  applyHistoryExpandedState(container) {
+    if (!container || !this.historyExpandedProjects || this.historyExpandedProjects.size === 0) return;
+    container.querySelectorAll('.project-item').forEach((item) => {
+      const key = item.getAttribute('data-project-key');
+      if (key && this.historyExpandedProjects.has(key)) {
+        item.classList.add('expanded');
+      }
+    });
+  }
+
+  updateHistoryExpandedState(key, expanded) {
+    if (!key) return;
+    if (expanded) this.historyExpandedProjects.add(key);
+    else this.historyExpandedProjects.delete(key);
   }
 
   async renderConversationDetailInToc(conversationId) {
@@ -3627,6 +3917,8 @@ async applySavedWidth() {
       this.historyDetailConvId = conversationId;
       this.historyDetailConvData = convData;
 
+      this.updateOpenInPlatformButtonText(convData.platform || 'ChatGPT');
+
       headerEl.innerHTML = '<div class="conv-detail-header-inner">' +
         '<div class="conv-detail-title conv-detail-title-editable" title="' + this._t('conv.editTitleHint') + '">' + this.escapeHtml(convData.title || this._t('conv.defaultTitle')) + '</div>' +
       '</div>';
@@ -3644,7 +3936,8 @@ async applySavedWidth() {
       this.bindConvDetailFilters(conversationId, convDetailSearchEl);
 
       btnOpen.onclick = () => {
-        window.open(window.location.origin + '/c/' + conversationId, '_blank');
+        const url = this.getConversationOpenUrl(convData.platform || 'ChatGPT', conversationId, convData.link);
+        if (url) window.open(url, '_blank');
       };
 
     } catch (e) {
@@ -4148,6 +4441,15 @@ async applySavedWidth() {
       list = list.filter(item => item.id !== conversationId);
       await window.storageManager.saveConversationList(list);
 
+      // 从自动项目及我创建的项目中移除
+      await window.projectManager.removeFromAutoProject(conversationId);
+      const myProjects = window.projectManager.getMyProjects();
+      for (const [projectId, project] of Object.entries(myProjects)) {
+        if ((project.conversations || []).includes(conversationId)) {
+          await window.projectManager.removeFromMyProject(conversationId, projectId);
+        }
+      }
+
       // 删除对话数据
       await window.storageManager.deleteConversation(conversationId);
 
@@ -4243,6 +4545,7 @@ async applySavedWidth() {
 
   /**
    * 更新平台项目映射（按 platform:slug 存，重命名只更新显示名）
+   * 多平台均参与：ChatGPT / Gemini 等；无 slug 时归入该平台的 Inbox
    */
   async updatePlatformProjectMapping() {
     if (!this.conversationId) return;
@@ -4250,7 +4553,7 @@ async applySavedWidth() {
     const slug = window.platformAdapter && window.platformAdapter.getProjectSlug ? window.platformAdapter.getProjectSlug() : null;
     const name = window.platformAdapter && window.platformAdapter.getProjectName ? window.platformAdapter.getProjectName() : null;
     await window.projectManager.mapToAutoProject(this.conversationId, platform, slug, name);
-    this.log(`${platform} project mapping updated:`, slug ? `${slug} (${name})` : 'none');
+    this.log(`${platform} project mapping updated:`, `${slug != null ? slug : 'Inbox'}${name ? ` (${name})` : ''}`);
   }
 
   // 兼容旧方法名
@@ -4321,10 +4624,8 @@ async applySavedWidth() {
    * 渲染项目列表（可展开、对话列表、移除/移动）
    */
   async renderProjects() {
-    const chatgptProjects = window.projectManager.getChatGPTProjects();
     const myProjects = window.projectManager.getMyProjects();
     const allConvIds = [];
-    Object.values(chatgptProjects).forEach((p) => allConvIds.push(...(p.conversations || [])));
     Object.values(myProjects).forEach((p) => allConvIds.push(...(p.conversations || [])));
     const list = await window.storageManager.getConversationList() || [];
     const listById = {};
@@ -4391,6 +4692,9 @@ async applySavedWidth() {
                   const snippetHtml = projKw ? this.highlightKeywordInText(snippetText, projKw) : this.escapeHtml(snippetText);
                   const showContentMatch = projKw && item._contentMatchCount > 0;
                   const matchText = showContentMatch ? this._t('conv.contentMatches', { n: String(item._contentMatchCount) }) : '';
+                  const platformName = item.platform || 'ChatGPT';
+                  const platformTag = this.escapeHtml(platformName);
+                  const platformIconUrl = this.getPlatformIconUrl(platformName);
                   return `
                 <li class="conv-card" data-conversation-id="${this.escapeHtml(item.id)}" ${projectType === 'my' ? 'draggable="true"' : ''} title="${projectType === 'my' ? this.escapeHtml(this._t('conv.dragToProject')) : ''}">
                   <button type="button" class="export-select-dot" data-scope="projects" data-type="conversation" data-id="${this.escapeHtml(item.id)}" aria-label="${this._t('export.select')}"></button>
@@ -4404,7 +4708,10 @@ async applySavedWidth() {
                   </div>
                   <div class="conv-card-snippet">${snippetHtml}</div>
                   <div class="conv-card-meta">
-                    <span class="conv-card-tag">ChatGPT</span>
+                    <span class="conv-card-tag">
+                      <img src="${this.escapeHtml(platformIconUrl)}" alt="" class="conv-card-tag-icon" />
+                      <span class="conv-card-tag-text">${platformTag}</span>
+                    </span>
                     ${showContentMatch ? `<span class="conv-card-match">${this.escapeHtml(matchText)}</span>` : ''}
                     <span class="conv-card-info">💬 ${item.messageCount || 0}</span>
                     <span class="conv-card-time">${this.formatTimeAgo(item.lastSeenAt)}</span>
@@ -4462,20 +4769,7 @@ async applySavedWidth() {
         </li>`;
     };
 
-    const chatgptList = this.shadowRoot.getElementById('auto-projects-list');
-    if (Object.keys(chatgptProjects).length === 0) {
-      chatgptList.innerHTML = '<div class="empty-state"><div class="empty-state-text">' + this._t('empty.noChatGPTProjects') + '</div></div>';
-    } else {
-      const chatgptItems = [];
-      for (const [key, project] of Object.entries(chatgptProjects)) {
-        const name = project.name || key;
-        const filteredEntries = await filterEntriesForProject(project.conversations || []);
-        if (projKwLower && filteredEntries.length === 0 && !name.toLowerCase().includes(projKwLower)) continue;
-        chatgptItems.push(renderProjectItem('chatgpt', key, name, filteredEntries));
-      }
-      chatgptList.innerHTML = chatgptItems.length ? chatgptItems.join('') : '<div class="empty-state"><div class="empty-state-text">' + this._t('empty.noFilterProjects') + '</div></div>';
-    }
-
+    // 我创建的项目（项目页仅保留此项）
     const myList = this.shadowRoot.getElementById('my-projects-list');
     if (Object.keys(myProjects).length === 0) {
       myList.innerHTML = '<div class="empty-state"><div class="empty-state-text">' + this._t('empty.noMyProjects').replace(/\n/g, '<br>') + '</div></div>';
@@ -4490,8 +4784,8 @@ async applySavedWidth() {
       myList.innerHTML = myItems.length ? myItems.join('') : '<div class="empty-state"><div class="empty-state-text">' + this._t('empty.noFilterProjects') + '</div></div>';
     }
 
-    this.bindProjectItemEvents(chatgptList);
     this.bindProjectItemEvents(myList);
+    this.applyProjectsExpandedState(myList);
     this.applyProjectSectionCollapsed();
     if (this.exportState.active && this.exportState.scope === 'projects') {
       this.syncExportSelectionUI();
@@ -4499,9 +4793,7 @@ async applySavedWidth() {
   }
 
   applyProjectSectionCollapsed() {
-    const chatgptSection = this.shadowRoot.querySelector('.project-section .project-section-header[data-section="chatgpt"]')?.closest('.project-section');
     const mySection = this.shadowRoot.querySelector('.project-section .project-section-header[data-section="my"]')?.closest('.project-section');
-    if (chatgptSection) chatgptSection.classList.toggle('project-section-collapsed', !!this.projectSectionCollapsed.chatgpt);
     if (mySection) mySection.classList.toggle('project-section-collapsed', !!this.projectSectionCollapsed.my);
   }
 
@@ -4520,9 +4812,11 @@ async applySavedWidth() {
         if (this.exportState.active && this.exportState.scope === 'projects') {
           if (e.target.closest('.export-select-dot')) return;
           item.classList.toggle('expanded');
+          this.updateProjectsExpandedState(type, key, item.classList.contains('expanded'));
           return;
         }
         item.classList.toggle('expanded');
+        this.updateProjectsExpandedState(type, key, item.classList.contains('expanded'));
       });
 
       const displayName = type === 'my' ? (window.projectManager.getMyProjects()[key]?.name || key) : key;
@@ -4661,7 +4955,7 @@ async applySavedWidth() {
             return;
           }
           const convId = el.getAttribute('data-conv-id') || el.closest('.conv-card')?.getAttribute('data-conversation-id') || el.closest('.project-conversation-item')?.getAttribute('data-conversation-id');
-          if (convId) window.open(window.location.origin + '/c/' + convId, '_blank');
+          if (convId) this.openConversationInNewTab(convId);
         });
       });
 
@@ -4755,10 +5049,9 @@ async applySavedWidth() {
             if (!raw) return;
             const { conversationId: convId, sourceProjectKey: sourceKey } = JSON.parse(raw);
             if (!convId || sourceKey === key) return;
-            const chatgptList = this.shadowRoot.getElementById('auto-projects-list');
             const myList = this.shadowRoot.getElementById('my-projects-list');
             const expandedKeys = new Set();
-            [chatgptList, myList].forEach((c) => {
+            [myList].forEach((c) => {
               if (!c) return;
               c.querySelectorAll('.project-item.expanded').forEach((el) => {
                 expandedKeys.add(JSON.stringify([el.getAttribute('data-project-type'), el.getAttribute('data-project-key')]));
@@ -4767,7 +5060,7 @@ async applySavedWidth() {
             await window.projectManager.removeFromMyProject(convId, sourceKey);
             await window.projectManager.addToMyProject(convId, key);
             await this.renderProjects();
-            [chatgptList, myList].forEach((c) => {
+            [myList].forEach((c) => {
               if (!c) return;
               c.querySelectorAll('.project-item').forEach((el) => {
                 const k = JSON.stringify([el.getAttribute('data-project-type'), el.getAttribute('data-project-key')]);
@@ -4781,6 +5074,30 @@ async applySavedWidth() {
         });
       }
     });
+  }
+
+  applyProjectsExpandedState(container) {
+    if (!container || !this.projectsExpandedItems || this.projectsExpandedItems.size === 0) return;
+    container.querySelectorAll('.project-item').forEach((item) => {
+      const type = item.getAttribute('data-project-type');
+      const key = item.getAttribute('data-project-key');
+      const id = this.getProjectsExpandedKey(type, key);
+      if (id && this.projectsExpandedItems.has(id)) {
+        item.classList.add('expanded');
+      }
+    });
+  }
+
+  updateProjectsExpandedState(type, key, expanded) {
+    const id = this.getProjectsExpandedKey(type, key);
+    if (!id) return;
+    if (expanded) this.projectsExpandedItems.add(id);
+    else this.projectsExpandedItems.delete(id);
+  }
+
+  getProjectsExpandedKey(type, key) {
+    if (!type || !key) return null;
+    return `${type}:${key}`;
   }
 
   /**
