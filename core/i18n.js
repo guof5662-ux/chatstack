@@ -84,9 +84,6 @@ class I18nManager {
         'settings.theme.dark': '深色模式',
         'settings.data.title': '数据管理',
         'settings.data.clearAll': '清空所有数据',
-        'settings.footer.debugMode': '开发模式',
-        'settings.footer.enabled': '启用',
-        'settings.footer.disabled': '禁用',
 
         // 操作
         'action.openInChatGPT': '在 ChatGPT 中打开',
@@ -288,9 +285,6 @@ class I18nManager {
         'settings.theme.dark': 'Dark Mode',
         'settings.data.title': 'Data Management',
         'settings.data.clearAll': 'Clear All Data',
-        'settings.footer.debugMode': 'Debug Mode',
-        'settings.footer.enabled': 'Enabled',
-        'settings.footer.disabled': 'Disabled',
 
         // Actions
         'action.openInChatGPT': 'Open in ChatGPT',

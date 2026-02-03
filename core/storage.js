@@ -308,7 +308,6 @@ class StorageManager {
    */
   getDefaultConfig() {
     return {
-      debugMode: true,
       sidebarWidth: 320,
       sidebarOpen: false, // 首屏默认只显示悬浮图标，不显示侧边栏
       floatButtonPosition: null, // { x, y, edge: 'left'|'right'|null }
