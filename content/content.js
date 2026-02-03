@@ -119,13 +119,6 @@ class SidebarExtension {
     await window.projectManager.init();
     this.log('ProjectManager initialized');
 
-    // 书签管理器
-    await window.bookmarkManager.init();
-    this.log('BookmarkManager initialized');
-
-    // 阅读进度管理器
-    await window.progressManager.init();
-    this.log('ProgressManager initialized');
   }
 
   /**

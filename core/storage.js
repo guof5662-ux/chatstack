@@ -271,33 +271,6 @@ class StorageManager {
   }
 
   /**
-   * 获取所有书签
-   * @returns {Promise<Array>}
-   */
-  async getAllBookmarks() {
-    const result = await this.get('bookmarks');
-    return result.bookmarks || [];
-  }
-
-  /**
-   * 保存书签
-   * @param {Array} bookmarks
-   * @returns {Promise<void>}
-   */
-  async saveBookmarks(bookmarks) {
-    try {
-      await this.set({ bookmarks });
-    } catch (error) {
-      if (this.isContextInvalidated(error)) {
-        if (this.DEBUG) this.log('saveBookmarks context invalidated, skip');
-        return;
-      }
-      if (this.DEBUG) this.log('saveBookmarks Error (swallowed):', error && (error.message || String(error)));
-      // 不再 throw
-    }
-  }
-
-  /**
    * 获取配置
    * @returns {Promise<Object>}
    */
@@ -335,7 +308,6 @@ class StorageManager {
    */
   getDefaultConfig() {
     return {
-      autoRestoreProgress: true,
       debugMode: true,
       sidebarWidth: 320,
       sidebarOpen: false, // 首屏默认只显示悬浮图标，不显示侧边栏
