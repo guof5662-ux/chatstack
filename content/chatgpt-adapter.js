@@ -25,6 +25,9 @@ class ChatGPTAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+      return chrome.runtime.getURL('icons/chatgpt.png');
+    }
     return this.siteConfig?.platformIcon || 'https://chatgpt.com/favicon.ico';
   }
 
