@@ -45,7 +45,7 @@ class SidebarUI {
     this.lastNonSettingsTab = 'toc';
     this.msgSearchPersist = null;
     // 导出模式状态
-    this.exportState = { active: false, scope: null, selected: new Set(), formats: { json: false, md: false, txt: false }, zip: false };
+    this.exportState = { active: false, scope: null, selected: new Set(), formats: { json: false, md: false, txt: false } };
     this.exportMod = typeof globalThis.SidebarExport !== 'undefined' ? new globalThis.SidebarExport(this) : null;
     this.tocMod = typeof globalThis.SidebarTOC !== 'undefined' ? new globalThis.SidebarTOC(this) : null;
     this.filterMod = typeof globalThis.SidebarFilters !== 'undefined' ? new globalThis.SidebarFilters(this) : null;
@@ -147,12 +147,89 @@ class SidebarUI {
       const platform = (conv && conv.platform) ? conv.platform : 'ChatGPT';
       const link = conv && conv.link ? conv.link : '';
       const url = this.getConversationOpenUrl(platform, conversationId, link);
+
+      // 如果是打开当前平台的对话，先验证是否还存在
+      if (this.isCurrentPlatform(platform)) {
+        const exists = this.checkConversationExists(conversationId);
+        if (!exists) {
+          this.log('Conversation no longer exists on platform, deleting locally:', conversationId);
+          await this.silentDeleteConversation(conversationId);
+          this.showToast(this._t('toast.convDeletedOnPlatform'));
+          return;
+        }
+      }
+
       if (url) window.open(url, '_blank');
     } catch (e) {
       this.log('openConversationInNewTab error:', e);
       const url = this.getConversationOpenUrl('ChatGPT', conversationId, '');
       if (url) window.open(url, '_blank');
     }
+  }
+
+  /**
+   * 检查当前平台上对话是否存在
+   * 通过扫描当前页面DOM中的对话链接来验证
+   */
+  checkConversationExists(conversationId) {
+    if (!window.platformAdapter) return true; // 无法验证，假设存在
+    if (!conversationId) return true;
+
+    try {
+      const hostname = window.location.hostname || '';
+      const links = new Set();
+
+      // 根据平台提取对话ID（从页面DOM中）
+      if (hostname.includes('chatgpt.com') || hostname.includes('openai.com')) {
+        // ChatGPT: /c/{id} 格式
+        document.querySelectorAll('a[href*="/c/"]').forEach(el => {
+          const match = el.href.match(/\/c\/([a-zA-Z0-9-]+)/);
+          if (match) links.add(match[1]);
+        });
+      } else if (hostname.includes('gemini')) {
+        // Gemini: /app/{id} 格式
+        document.querySelectorAll('a[href*="/app/"]').forEach(el => {
+          const match = el.href.match(/\/app\/([^/?]+)/);
+          if (match) links.add(match[1]);
+        });
+      } else if (hostname.includes('claude')) {
+        // Claude: /chat/{id} 格式
+        document.querySelectorAll('a[href*="/chat/"]').forEach(el => {
+          const match = el.href.match(/\/chat\/([^/?]+)/);
+          if (match) links.add(match[1]);
+        });
+      } else if (hostname.includes('deepseek')) {
+        // DeepSeek: /a/chat/s/{id} 格式 (ID会被替换为 a_chat_s_xxx)
+        document.querySelectorAll('a[href*="/a/chat/s/"]').forEach(el => {
+          const match = el.href.match(/\/a\/chat\/s\/([a-zA-Z0-9]+)/);
+          if (match) links.add(`a_chat_s_${match[1]}`);
+        });
+      }
+
+      // 检查目标对话ID是否在页面上存在
+      const exists = links.has(conversationId);
+      this.log(`Check conversation ${conversationId} exists on page: ${exists}`);
+      return exists;
+    } catch (e) {
+      this.log('checkConversationExists error:', e);
+      return true; // 出错时假设存在，避免误删
+    }
+  }
+
+  /**
+   * 检查当前运行环境是否在目标平台上
+   */
+  isCurrentPlatform(platform) {
+    if (!window.platformAdapter) return false;
+    return this.isSamePlatform(platform, window.platformAdapter.getPlatformName());
+  }
+
+  /**
+   * 比较两个平台名称是否相同
+   */
+  isSamePlatform(platform1, platform2) {
+    if (!platform1 || !platform2) return false;
+    return platform1.toLowerCase() === platform2.toLowerCase();
   }
 
   /** 根据平台名称返回平台 logo URL（用于历史/项目卡片） */
@@ -162,8 +239,11 @@ class SidebarUI {
       ChatGPT: 'https://chatgpt.com/favicon.ico',
       Gemini: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
       Claude: 'https://claude.ai/favicon.ico',
-      DeepSeek: 'https://deepseek.com/favicon.ico',
+      DeepSeek: 'https://cdn.deepseek.com/logo.png',
     };
+    if (name === 'DeepSeek' && this.isExtensionContextValid() && chrome.runtime.getURL) {
+      return chrome.runtime.getURL('icons/deepseek.png');
+    }
     return urls[name] || urls.ChatGPT;
   }
 
@@ -520,6 +600,23 @@ class SidebarUI {
             <!-- 数据管理 -->
             <div class="settings-section">
               <h3 class="settings-section-title" data-i18n="settings.data.title">数据管理</h3>
+
+              <!-- 清空历史对话 -->
+              <div style="margin-bottom: 12px;">
+                <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;" data-i18n="settings.data.clearHistory">清空历史对话</div>
+                <div class="settings-clear-row">
+                  <select id="select-clear-history" class="settings-select">
+                    <option value="7" data-i18n="settings.data.timeRange.7d">一周前</option>
+                    <option value="30" data-i18n="settings.data.timeRange.30d">一个月前</option>
+                    <option value="90" data-i18n="settings.data.timeRange.90d">三个月前</option>
+                    <option value="all" data-i18n="settings.data.timeRange.all">全部对话</option>
+                  </select>
+                  <button class="btn btn-danger btn-small" id="btn-clear-history" data-i18n="settings.data.clearHistoryBtn">清空</button>
+                </div>
+                <p class="settings-hint" data-i18n="settings.data.clearHistory.hint">清空指定时间前的对话，不影响项目和配置</p>
+              </div>
+
+              <!-- 清空所有数据 -->
               <div class="settings-buttons">
                 <button class="btn btn-danger" id="btn-clear-data" data-i18n="settings.data.clearAll">清空所有数据</button>
               </div>
@@ -527,7 +624,7 @@ class SidebarUI {
 
             <!-- 版本信息 -->
             <div class="settings-footer">
-              <p>ChatGPT Sidebar Navigator v1.0.0</p>
+              <p id="version-info"></p>
             </div>
           </div>
         </div>
@@ -542,6 +639,7 @@ class SidebarUI {
     this.createFloatButton();
     this.bindEvents();
     this.initSettings();
+    this.updateVersionInfo();
   }
 
   getLayoutRoots() {
@@ -1049,10 +1147,6 @@ async applySavedWidth() {
       if (!target) return;
       if (target.matches('.export-bar input[data-format]')) {
         this.exportState.formats[target.getAttribute('data-format')] = target.checked;
-        return;
-      }
-      if (target.matches('.export-bar input[data-zip]')) {
-        this.exportState.zip = target.checked;
       }
     });
 
@@ -1293,6 +1387,20 @@ async applySavedWidth() {
       this.clearAllData();
     });
 
+    this.shadowRoot.getElementById('btn-clear-history')?.addEventListener('click', () => {
+      const daysValue = this.shadowRoot.getElementById('select-clear-history')?.value;
+      const daysMap = {
+        '7': { days: 7, label: this._t('settings.data.timeRange.7d') },
+        '30': { days: 30, label: this._t('settings.data.timeRange.30d') },
+        '90': { days: 90, label: this._t('settings.data.timeRange.90d') },
+        'all': { days: Infinity, label: this._t('settings.data.timeRange.all') }
+      };
+      const selected = daysMap[daysValue];
+      if (selected) {
+        this.clearHistoryData(selected.days, selected.label);
+      }
+    });
+
     // 设置 - 自动保存开关
     this.shadowRoot.getElementById('toggle-auto-save')?.addEventListener('change', async (e) => {
       try {
@@ -1484,6 +1592,23 @@ async applySavedWidth() {
       this.log('Settings initialized');
     } catch (error) {
       console.error('[SidebarUI] Error initializing settings:', error);
+    }
+  }
+
+  /**
+   * 更新版本信息，从 manifest.json 动态读取
+   */
+  updateVersionInfo() {
+    try {
+      const manifest = chrome.runtime.getManifest();
+      const versionInfo = this.shadowRoot.getElementById('version-info');
+      if (versionInfo && manifest) {
+        const name = manifest.name || 'ChatStack';
+        const version = manifest.version || '1.0.0';
+        versionInfo.textContent = `${name} ${version}`;
+      }
+    } catch (error) {
+      console.error('[SidebarUI] Error updating version info:', error);
     }
   }
 
@@ -2387,7 +2512,7 @@ async applySavedWidth() {
           for (const { key, project } of chatgptProjects) {
             const name = project.name || key;
             const filteredEntries = await filterEntriesForHistory(project.conversations || []);
-            if (kwLower && filteredEntries.length === 0 && !name.toLowerCase().includes(kwLower)) continue;
+            if (filteredEntries.length === 0 && ((kwLower && !name.toLowerCase().includes(kwLower)) || this.hasActiveFilter())) continue;
             const expandBySearch = !!(kwLower && (filteredEntries.length > 0 || name.toLowerCase().includes(kwLower)));
             projectsSectionItems.push(buildProjectItemHtml(key, name, filteredEntries, true, expandBySearch));
           }
@@ -2395,7 +2520,7 @@ async applySavedWidth() {
           if (chatgptInbox) {
             const inboxProject = chatgptInbox.project;
             const filteredInbox = await filterEntriesForHistory(inboxProject.conversations || []);
-            if (!kwLower || filteredInbox.length > 0 || (kwLower && '你的聊天'.toLowerCase().includes(kwLower))) {
+            if (filteredInbox.length > 0 || (!this.hasActiveFilter() && !kwLower) || (kwLower && '你的聊天'.toLowerCase().includes(kwLower))) {
               const yourChatsLabel = this._t('history.chatgpt.yourChats');
               const expandBySearch = !!(kwLower && filteredInbox.length > 0);
               yourChatsSectionHtml = buildProjectItemHtml('ChatGPT:Inbox', yourChatsLabel, filteredInbox, false, expandBySearch);
@@ -2405,7 +2530,7 @@ async applySavedWidth() {
           const yourChatsTitle = this._t('history.chatgpt.yourChats');
           const hasProjects = projectsSectionItems.length > 0;
           const hasYourChats = yourChatsSectionHtml !== '';
-          if (!hasProjects && !hasYourChats && kwLower) continue;
+          if (!hasProjects && !hasYourChats && (kwLower || this.hasActiveFilter())) continue;
           const projectsSectionKey = 'ChatGPT:projects';
           const projectsCollapsed = !kwLower && this.historySectionCollapsed.has(projectsSectionKey);
           const projectsToggleTitle = projectsCollapsed ? this._t('toc.expand') : this._t('toc.collapse');
@@ -2434,15 +2559,15 @@ async applySavedWidth() {
             const isInbox = key === `${platform}:Inbox`;
             const name = isInbox ? this._t('history.chatgpt.yourChats') : (project.name || key);
             const filteredEntries = await filterEntriesForHistory(project.conversations || []);
-            if (kwLower && filteredEntries.length === 0 && !name.toLowerCase().includes(kwLower)) continue;
+            if (filteredEntries.length === 0 && ((kwLower && !name.toLowerCase().includes(kwLower)) || this.hasActiveFilter())) continue;
             const expandBySearch = !!(kwLower && (filteredEntries.length > 0 || name.toLowerCase().includes(kwLower)));
             projectItems.push(buildProjectItemHtml(key, name, filteredEntries, !isInbox, expandBySearch));
           }
-          if (projectItems.length === 0 && kwLower) continue;
+          if (projectItems.length === 0 && (kwLower || this.hasActiveFilter())) continue;
           platformBlocks.push(`
           <div class="project-platform-block" data-platform="${this.escapeHtml(platform)}">
             <h4 class="project-platform-subtitle"><img class="project-section-icon" alt="" src="${this.escapeHtml(platformIconUrl)}" />${this.escapeHtml(platformTitle)}</h4>
-            <ul class="project-list">${projectItems.length ? projectItems.join('') : '<li class="project-conv-empty">' + this.escapeHtml(this._t('empty.noFilterProjects')) + '</li>'}</ul>
+            <ul class="project-list">${projectItems.length ? projectItems.join('') : '<li class="project-conv-empty">' + this.escapeHtml(noConvs) + '</li>'}</ul>
           </div>`);
         }
       }
@@ -3138,6 +3263,36 @@ async applySavedWidth() {
     } catch (e) {
       this.log('Copy failed:', e);
       this.showToast(this._t('toast.copyFailed'));
+    }
+  }
+
+  /**
+   * 无确认删除对话（用于同步原平台删除）
+   */
+  async silentDeleteConversation(conversationId) {
+    try {
+      // 从列表中删除
+      let list = await window.storageManager.getConversationList();
+      list = list.filter(item => item.id !== conversationId);
+      await window.storageManager.saveConversationList(list);
+
+      // 从自动项目及我创建的项目中移除
+      await window.projectManager.removeFromAutoProject(conversationId);
+      const myProjects = window.projectManager.getMyProjects();
+      for (const [projectId, project] of Object.entries(myProjects)) {
+        if ((project.conversations || []).includes(conversationId)) {
+          await window.projectManager.removeFromMyProject(conversationId, projectId);
+        }
+      }
+
+      // 删除对话数据
+      await window.storageManager.deleteConversation(conversationId);
+
+      // 重新渲染
+      this.renderConversationsList();
+      this.log('Silently deleted conversation (sync from platform):', conversationId);
+    } catch (e) {
+      this.log('Silent delete conversation error:', e);
     }
   }
 
@@ -3928,6 +4083,101 @@ async applySavedWidth() {
       await window.storageManager.clear();
       this.showToast(this._t('toast.dataCleared'));
       location.reload();
+    }
+  }
+
+  /**
+   * 清空历史数据 - 清除指定时间范围外的对话
+   * @param {number} days - 保留天数（Infinity 表示全部删除）
+   * @param {string} rangeLabel - 时间范围标签（用于确认对话框）
+   */
+  async clearHistoryData(days, rangeLabel) {
+    try {
+      const cutoffTime = days === Infinity ? Infinity : Date.now() - days * 24 * 60 * 60 * 1000;
+
+      // 获取对话列表
+      const list = await window.storageManager.getConversationList();
+      if (!list || list.length === 0) {
+        this.showToast(this._t('toast.noOldHistory'));
+        return;
+      }
+
+      // 分类：需删除和保留
+      const toRemove = [];
+      const toKeep = [];
+      for (const item of list) {
+        const timestamp = item.lastSeenAt || 0;
+        if (timestamp < cutoffTime) {
+          toRemove.push(item);
+        } else {
+          toKeep.push(item);
+        }
+      }
+
+      // 若无符合条件的对话，直接提示
+      if (toRemove.length === 0) {
+        this.showToast(this._t('toast.noOldHistory'));
+        return;
+      }
+
+      // 确认对话框
+      const message = this._t('confirm.clearHistory.message', {
+        count: String(toRemove.length),
+        range: rangeLabel
+      });
+      const ok = await this.showConfirmDialog(
+        this._t('confirm.clearHistory.title'),
+        message
+      );
+      if (!ok) return;
+
+      // 执行删除：conversationList + conv_<id> key + projects 中的引用
+      await window.storageManager.saveConversationList(toKeep);
+
+      // 批量删除 conv_<id> 对应的 storage key
+      const removeIds = toRemove.map(item => item.id);
+      const keysToRemove = removeIds.map(id => `conv_${id}`);
+      if (keysToRemove.length > 0) {
+        await window.storageManager.remove(keysToRemove);
+      }
+
+      // 清理 projects 中的引用
+      if (window.projectManager && window.projectManager.projects) {
+        const projects = window.projectManager.projects;
+        const removeIdSet = new Set(removeIds);
+
+        // 清理 auto projects
+        if (projects.auto) {
+          for (const key in projects.auto) {
+            const project = projects.auto[key];
+            if (project.conversations && Array.isArray(project.conversations)) {
+              project.conversations = project.conversations.filter(id => !removeIdSet.has(id));
+            }
+          }
+        }
+
+        // 清理 my projects
+        if (projects.my) {
+          for (const key in projects.my) {
+            const project = projects.my[key];
+            if (project.conversations && Array.isArray(project.conversations)) {
+              project.conversations = project.conversations.filter(id => !removeIdSet.has(id));
+            }
+          }
+        }
+
+        // 保存项目更新
+        await window.projectManager.save();
+      }
+
+      // 重新渲染 & 提示
+      this.renderConversationsList();
+      this.renderProjects();
+      this.showToast(this._t('toast.historyCleared', { count: String(toRemove.length) }));
+      this.log(`Cleared ${toRemove.length} conversations (${rangeLabel})`);
+    } catch (e) {
+      this.log('Clear history error:', e);
+      this.showToast('清空历史失败');
     }
   }
 

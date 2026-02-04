@@ -83,6 +83,13 @@ class I18nManager {
         'settings.theme.light': '浅色模式',
         'settings.theme.dark': '深色模式',
         'settings.data.title': '数据管理',
+        'settings.data.clearHistory': '清空历史对话',
+        'settings.data.clearHistory.hint': '清空指定时间前的对话，不影响项目和配置',
+        'settings.data.timeRange.7d': '一周前',
+        'settings.data.timeRange.30d': '一个月前',
+        'settings.data.timeRange.90d': '三个月前',
+        'settings.data.timeRange.all': '全部对话',
+        'settings.data.clearHistoryBtn': '清空',
         'settings.data.clearAll': '清空所有数据',
 
         // 操作
@@ -157,6 +164,8 @@ class I18nManager {
         // 确认对话框
         'confirm.clearData.title': '确认清空',
         'confirm.clearData.message': '确定要清空所有数据吗？此操作不可恢复！',
+        'confirm.clearHistory.title': '确认清空历史',
+        'confirm.clearHistory.message': '将清空 {count} 条对话记录（{range}），此操作不可恢复！',
         'confirm.deleteConv.title': '确认删除',
         'confirm.deleteConv.message': '确定要删除这个对话记录吗？',
         'confirm.deleteProject': '确定要删除此项目吗？',
@@ -183,6 +192,8 @@ class I18nManager {
         'toast.progressRestored': '进度已恢复',
         'toast.noProgress': '没有保存的进度',
         'toast.dataCleared': '数据已清空',
+        'toast.historyCleared': '已清空 {count} 条对话记录',
+        'toast.noOldHistory': '没有符合条件的对话',
         'toast.settingsSaved': '设置已保存',
         'toast.copied': '已复制',
         'toast.copyFailed': '复制失败',
@@ -196,6 +207,7 @@ class I18nManager {
         'toast.movedToProject': '已移动到当前项目',
         'toast.cannotGetSessionId': '无法获取会话 ID',
         'toast.openConversationFirst': '请先打开或创建一个对话',
+        'toast.convDeletedOnPlatform': '该对话已在原平台被删除，本地记录已清理',
 
         // 对话/项目 UI
         'conv.unnamed': '未命名对话',
@@ -284,6 +296,13 @@ class I18nManager {
         'settings.theme.light': 'Light Mode',
         'settings.theme.dark': 'Dark Mode',
         'settings.data.title': 'Data Management',
+        'settings.data.clearHistory': 'Clear History',
+        'settings.data.clearHistory.hint': 'Clear conversations older than selected time. Projects and settings are preserved.',
+        'settings.data.timeRange.7d': 'Last 7 days',
+        'settings.data.timeRange.30d': 'Last 30 days',
+        'settings.data.timeRange.90d': 'Last 90 days',
+        'settings.data.timeRange.all': 'All conversations',
+        'settings.data.clearHistoryBtn': 'Clear',
         'settings.data.clearAll': 'Clear All Data',
 
         // Actions
@@ -358,6 +377,8 @@ class I18nManager {
         // Confirm dialogs
         'confirm.clearData.title': 'Confirm Clear',
         'confirm.clearData.message': 'Are you sure you want to clear all data? This cannot be undone.',
+        'confirm.clearHistory.title': 'Confirm Clear History',
+        'confirm.clearHistory.message': 'Clear {count} conversation records ({range})? This cannot be undone!',
         'confirm.deleteConv.title': 'Confirm Delete',
         'confirm.deleteConv.message': 'Are you sure you want to delete this conversation?',
         'confirm.deleteProject': 'Are you sure you want to delete this project?',
@@ -384,6 +405,8 @@ class I18nManager {
         'toast.progressRestored': 'Progress restored',
         'toast.noProgress': 'No saved progress',
         'toast.dataCleared': 'Data cleared',
+        'toast.historyCleared': 'Cleared {count} conversation records',
+        'toast.noOldHistory': 'No matching conversations found',
         'toast.settingsSaved': 'Settings saved',
         'toast.copied': 'Copied',
         'toast.copyFailed': 'Copy failed',
@@ -397,6 +420,7 @@ class I18nManager {
         'toast.movedToProject': 'Moved to project',
         'toast.cannotGetSessionId': 'Cannot get session ID',
         'toast.openConversationFirst': 'Please open or create a conversation first',
+        'toast.convDeletedOnPlatform': 'This conversation was deleted on the platform. Local record has been removed.',
 
         // Conversation / project UI
         'conv.unnamed': 'Unnamed conversation',

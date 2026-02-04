@@ -25,7 +25,13 @@ class DeepSeekAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
-    return this.siteConfig?.platformIcon || 'https://chat.deepseek.com/favicon.ico';
+    // 优先使用扩展内打包的 DeepSeek 官方 logo，其次配置/CDN
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.getURL) {
+        return chrome.runtime.getURL('icons/deepseek.png');
+      }
+    } catch (e) {}
+    return this.siteConfig?.platformIcon || 'https://cdn.deepseek.com/logo.png';
   }
 
   /**

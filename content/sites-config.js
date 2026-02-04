@@ -63,7 +63,7 @@ const SITES_CONFIG = {
   },
   'chat.deepseek.com': {
     platformName: 'DeepSeek',
-    platformIcon: 'https://chat.deepseek.com/favicon.ico',
+    platformIcon: 'https://cdn.deepseek.com/logo.png',
     selectors: {
       container: '.dad65929',
       mainContainer: '.dad65929',
