@@ -1,6 +1,7 @@
 /**
  * 站点配置 - 类似 ChatTOC 的 sitesConfig，驱动各平台 DOM 选择器
  * 便于维护与扩展，选择器变更时只需修改此处
+ * 平台匹配：content.js 根据 hostname 选择对应 adapter；各域名映射到唯一平台名与 selectors，改版时在此处与对应 adapter 同步更新选择器
  */
 
 const SUPPORTED_DOMAINS = [

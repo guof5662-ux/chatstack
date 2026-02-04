@@ -2,6 +2,10 @@
  * DeepSeek 页面适配器 - 负责解析 DeepSeek 页面的 DOM 结构
  * 继承 BasePlatformAdapter，参考 ChatMemo 实现
  * 只获取正式回复，跳过思考块（thinking blocks）
+ *
+ * 站点与 URL：https://chat.deepseek.com；对话页 /a/chat/s/{id}
+ * 依赖 DOM（见 content/sites-config.js）：container/.dad65929、userMessage、aiMessage、dsMessage、dsMarkdown、thinkingContainer
+ * 改版时：同步更新 sites-config.js 中 chat.deepseek.com 的 selectors 与本 adapter 内选择器
  */
 
 class DeepSeekAdapter extends BasePlatformAdapter {

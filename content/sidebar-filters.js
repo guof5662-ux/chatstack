@@ -30,11 +30,11 @@
       const weekdaysHtml = weekdays.map((d) => `<span>${this.sidebar.escapeHtml(d)}</span>`).join('');
       popup.innerHTML = `
       <div class="date-picker-header">
-        <button type="button" class="date-picker-nav" data-delta="-12" title="${this.sidebar.escapeHtml(this._t('datePicker.prevYear'))}"><<</button>
-        <button type="button" class="date-picker-nav" data-delta="-1" title="${this.sidebar.escapeHtml(this._t('datePicker.prevMonth'))}"><</button>
+        <button type="button" class="date-picker-nav" data-delta="-12" title="${this.sidebar.escapeHtml(this._t('datePicker.prevYear'))}" aria-label="${this.sidebar.escapeHtml(this._t('datePicker.prevYear'))}"><<</button>
+        <button type="button" class="date-picker-nav" data-delta="-1" title="${this.sidebar.escapeHtml(this._t('datePicker.prevMonth'))}" aria-label="${this.sidebar.escapeHtml(this._t('datePicker.prevMonth'))}"><</button>
         <span class="date-picker-title"></span>
-        <button type="button" class="date-picker-nav" data-delta="1" title="${this.sidebar.escapeHtml(this._t('datePicker.nextMonth'))}">></button>
-        <button type="button" class="date-picker-nav" data-delta="12" title="${this.sidebar.escapeHtml(this._t('datePicker.nextYear'))}">>></button>
+        <button type="button" class="date-picker-nav" data-delta="1" title="${this.sidebar.escapeHtml(this._t('datePicker.nextMonth'))}" aria-label="${this.sidebar.escapeHtml(this._t('datePicker.nextMonth'))}">></button>
+        <button type="button" class="date-picker-nav" data-delta="12" title="${this.sidebar.escapeHtml(this._t('datePicker.nextYear'))}" aria-label="${this.sidebar.escapeHtml(this._t('datePicker.nextYear'))}">>></button>
       </div>
       <div class="date-picker-weekdays">${weekdaysHtml}</div>
       <div class="date-picker-grid"></div>

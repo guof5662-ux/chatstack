@@ -140,6 +140,7 @@
       this.syncExportSelectionUI();
     }
 
+    /** 导出勾选 key：scope=toc|history|projects；type=message|conversation|project；项目用 projectType+projectKey，其余用 id；用于 selected Set 与全选/同步 UI */
     getExportKeyFromDot(dot) {
       const scope = dot.getAttribute('data-scope');
       const type = dot.getAttribute('data-type');

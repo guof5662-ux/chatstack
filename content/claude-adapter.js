@@ -2,6 +2,10 @@
  * Claude 页面适配器 - 负责解析 Claude 页面的 DOM 结构
  * 继承 BasePlatformAdapter，参考 ChatMemo 实现
  * 只获取正式回复，跳过思考块（thinking blocks）
+ *
+ * 站点与 URL：https://claude.ai；对话页 /chat/{id} 或 /o/.../chat/{id}
+ * 依赖 DOM（见 content/sites-config.js）：container/[data-test-render-count]、userItem、assistantItem
+ * 改版时：同步更新 sites-config.js 中 claude.ai 的 selectors 与本 adapter 内选择器
  */
 
 class ClaudeAdapter extends BasePlatformAdapter {

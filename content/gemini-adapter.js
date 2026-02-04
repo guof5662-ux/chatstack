@@ -1,6 +1,10 @@
 /**
  * Gemini 页面适配器 - 负责解析 Gemini 页面的 DOM 结构
  * 继承 BasePlatformAdapter，使用 ChatMemo 验证过的精准选择器
+ *
+ * 站点与 URL：https://gemini.google.com；对话页 /app/{id} 或 /gem/.../{id}
+ * 依赖 DOM（见 content/sites-config.js）：container/#chat-history、conversationBlock、userQuery、modelResponse、modelResponseText；useShadowDOM
+ * 改版时：同步更新 sites-config.js 中 gemini.google.com 的 selectors 与本 adapter 内选择器
  */
 
 class GeminiAdapter extends BasePlatformAdapter {
