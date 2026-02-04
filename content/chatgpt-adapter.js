@@ -90,7 +90,8 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         });
         let index = 0;
         allElements.forEach(({ element, role }) => {
-          const content = this.extractMessageContent(element, role);
+          let content = this.getContentWithStructure(element, role);
+          if (!content) content = this.extractMessageContent(element, role);
           if (!content || this.isNoiseContent(content)) return;
           const messageId = `msg_${index}`;
           element.setAttribute('data-ext-message-id', messageId);
@@ -108,7 +109,8 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         turnElements.forEach((el, index) => {
           const roleEl = el.querySelector('[data-message-author-role="user"]') ? 'user' : el.querySelector('[data-message-author-role="assistant"]') ? 'assistant' : null;
           if (!roleEl) return;
-          const content = this.extractMessageContent(el, roleEl);
+          let content = this.getContentWithStructure(el, roleEl);
+          if (!content) content = this.extractMessageContent(el, roleEl);
           if (!content || this.isNoiseContent(content)) return;
           const messageId = `msg_${index}`;
           el.setAttribute('data-ext-message-id', messageId);
@@ -132,7 +134,8 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         }
         if (!role) return;
 
-        const content = this.extractMessageContent(element, role);
+        let content = this.getContentWithStructure(element, role);
+        if (!content) content = this.extractMessageContent(element, role);
         if (!content || this.isNoiseContent(content)) return;
 
         const messageId = `msg_${messageIndex}`;
@@ -302,6 +305,32 @@ class ChatGPTAdapter extends BasePlatformAdapter {
   detectAssistantMessage(element) {
     return element.querySelector('img[alt*="ChatGPT"]') !== null ||
            element.querySelector('[class*="markdown"]') !== null;
+  }
+
+  /**
+   * 用 HTML 经 HtmlToMarkdown 得到带层级的文本，与侧边栏排版一致
+   * @param {HTMLElement} element - 消息容器（含 data-message-author-role）
+   * @param {string} role - 'user' | 'assistant'
+   * @returns {string} 带结构的文本，无 HtmlToMarkdown 时返回空串由调用方回退
+   */
+  getContentWithStructure(element, role) {
+    if (!element) return '';
+    const clone = element.cloneNode(true);
+    clone.querySelectorAll('button, [role="button"], .copy-button, .regenerate-button').forEach((btn) => btn.remove());
+    clone.querySelectorAll('.avatar, [data-testid*="avatar"]').forEach((avatar) => avatar.remove());
+    clone.querySelectorAll('svg').forEach((el) => el.remove());
+    const contentElement = clone.querySelector('[data-message-author-role], .markdown, .message-content, [class*="prose"]') || clone;
+    let html = (contentElement.innerHTML || '').trim();
+    html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+    html = html.replace(/<!--[\s\S]*?-->/g, '');
+    html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
+    html = html.trim();
+    if (!html) return '';
+    if (typeof window !== 'undefined' && window.HtmlToMarkdown && window.HtmlToMarkdown.toText) {
+      const text = window.HtmlToMarkdown.toText(html);
+      return (text && text.trim()) ? text : '';
+    }
+    return '';
   }
 
   /**

@@ -2023,6 +2023,35 @@
   color: #d1d5db;
 }
 
+/* 通用标题样式覆盖：确保未被正确替换class的标题标签也有正确样式 */
+.toc-content-full h1,
+.toc-content-full h2,
+.toc-content-full h3,
+.toc-content-full h4,
+.toc-content-full h5,
+.toc-content-full h6 {
+  margin: 0.4em 0 0.2em 0;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #374151;
+}
+
+.toc-content-full h1 { font-size: 13.8px; }
+.toc-content-full h2 { font-size: 13.6px; }
+.toc-content-full h3 { font-size: 13.4px; }
+.toc-content-full h4 { font-size: 13.2px; }
+.toc-content-full h5 { font-size: 13.1px; }
+.toc-content-full h6 { font-size: 13px; }
+
+.dark .toc-content-full h1,
+.dark .toc-content-full h2,
+.dark .toc-content-full h3,
+.dark .toc-content-full h4,
+.dark .toc-content-full h5,
+.dark .toc-content-full h6 {
+  color: #d1d5db;
+}
+
 .toc-content-full .toc-content-img {
   max-width: 100%;
   height: auto;
@@ -2233,10 +2262,10 @@
 .toc-expanded-h4,
 .toc-expanded-h5,
 .toc-expanded-h6 {
-  margin: 0.6em 0 0.35em 0;
-  font-weight: 400;
-  font-size: 13px;
-  line-height: 1.5;
+  margin: 0.4em 0 0.2em 0;
+  font-weight: 600;
+  font-size: 13.2px;
+  line-height: 1.45;
   color: #374151;
 }
 
@@ -2249,11 +2278,11 @@
   color: #d1d5db;
 }
 
-.toc-expanded-h1 { font-size: 13px; }
-.toc-expanded-h2 { font-size: 13px; }
-.toc-expanded-h3 { font-size: 13px; }
-.toc-expanded-h4 { font-size: 13px; }
-.toc-expanded-h5 { font-size: 13px; }
+.toc-expanded-h1 { font-size: 14.4px; }
+.toc-expanded-h2 { font-size: 13.9px; }
+.toc-expanded-h3 { font-size: 13.5px; }
+.toc-expanded-h4 { font-size: 13.2px; }
+.toc-expanded-h5 { font-size: 13.1px; }
 .toc-expanded-h6 { font-size: 13px; }
 
 .toc-expanded-pre {
@@ -2312,13 +2341,13 @@
 
 .toc-expanded-strong,
 .toc-expanded-b {
-  font-weight: 400;
+  font-weight: 500;
   color: #374151;
 }
 
 .dark .toc-expanded-strong,
 .dark .toc-expanded-b {
-  color: #d1d5db;
+  color: #e5e7eb;
 }
 
 .toc-msg-search-float {
@@ -2579,12 +2608,51 @@
 .history-chatgpt-section:last-child {
   margin-bottom: 0;
 }
+.history-chatgpt-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px 0;
+}
 .history-chatgpt-section-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--sidebar-fg-secondary, #6b7280);
-  margin: 0 0 6px 0;
+  margin: 0;
   letter-spacing: 0.02em;
+}
+.history-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  transition: transform 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+.history-section-toggle .sidebar-icon {
+  width: 14px;
+  height: 14px;
+}
+.history-section-toggle:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+.dark .history-section-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.history-chatgpt-section.history-section-collapsed .history-section-toggle {
+  transform: rotate(-90deg);
+}
+.history-chatgpt-section.history-section-collapsed .history-chatgpt-section-body {
+  display: none;
 }
 
 .project-header-create-btn {

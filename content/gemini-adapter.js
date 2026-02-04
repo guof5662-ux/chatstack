@@ -174,7 +174,8 @@ class GeminiAdapter extends BasePlatformAdapter {
       conversationBlocks.forEach((block) => {
         const userQueryContainer = block.querySelector('user-query .query-text');
         if (userQueryContainer) {
-          const content = this.cleanText(this.extractFormattedContent(userQueryContainer));
+          let content = this.getContentWithStructure(userQueryContainer);
+          if (!content) content = this.cleanText(this.extractFormattedContent(userQueryContainer));
           if (content && content.length >= this.minMessageContentLength && !this.looksLikeDisclaimer(content)) {
             const messageId = `gemini_msg_${index}`;
             index += 1;
@@ -188,8 +189,8 @@ class GeminiAdapter extends BasePlatformAdapter {
         if (modelResponseEntity) {
           const messageContentContainer = modelResponseEntity.querySelector('.model-response-text');
           const textEl = messageContentContainer || modelResponseEntity;
-          const raw = this.extractFormattedContent(textEl);
-          const content = this.cleanText(raw);
+          let content = this.getContentWithStructure(textEl);
+          if (!content) content = this.cleanText(this.extractFormattedContent(textEl));
           if (content && content.length >= this.minMessageContentLength && !this.looksLikeDisclaimer(content)) {
             const messageId = `gemini_msg_${index}`;
             index += 1;
@@ -209,6 +210,23 @@ class GeminiAdapter extends BasePlatformAdapter {
   }
 
   // ===== 辅助方法（参考 ChatMemo）=====
+
+  /**
+   * 用 HTML 经 HtmlToMarkdown 得到带层级的文本，与侧边栏排版一致
+   * @param {HTMLElement} element - 消息内容节点（user-query .query-text 或 model-response .model-response-text）
+   * @returns {string} 带结构的文本，无 HtmlToMarkdown 时返回空串由调用方回退
+   */
+  getContentWithStructure(element) {
+    if (!element) return '';
+    const html = (element.innerHTML || '').trim();
+    if (!html) return '';
+    if (typeof window !== 'undefined' && window.HtmlToMarkdown && window.HtmlToMarkdown.toText) {
+      const text = window.HtmlToMarkdown.toText(html);
+      const cleaned = (text && text.trim()) ? this.cleanText(text) : '';
+      return cleaned;
+    }
+    return '';
+  }
 
   /**
    * 检查是否处于编辑状态（避免在用户输入时解析）
@@ -295,7 +313,8 @@ class GeminiAdapter extends BasePlatformAdapter {
         return title.length > 50 ? title.substring(0, 50) + '...' : title;
       }
     }
-    const firstUser = document.querySelector('[data-test-id="user-message"]');
+    const firstUser = document.querySelector('[data-test-id="user-message"]') ||
+      document.querySelector('[data-testid="user-message"]');
     if (firstUser) {
       const text = (firstUser.innerText || '').trim();
       if (text) return text.length > 50 ? text.substring(0, 50) + '...' : text;

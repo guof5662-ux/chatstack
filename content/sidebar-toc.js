@@ -268,12 +268,74 @@
       this.sidebar.msgSearchPersist = null;
     }
 
+    isClaudeThinkingBlock(element) {
+      if (!element || !element.classList) return false;
+      const classList = element.classList;
+      const hasThinkingClasses =
+        classList.contains('transition-all') &&
+        classList.contains('rounded-lg') &&
+        (classList.contains('border-0.5') || classList.contains('border'));
+      const hasThinkingText =
+        element.textContent &&
+        (element.textContent.includes('Architected') || element.textContent.includes('Engineered'));
+      const hasCollapsibleButton = element.querySelector('button[aria-expanded]');
+      return hasThinkingClasses || (hasThinkingText && hasCollapsibleButton);
+    }
+
+    removeClaudeThinkingBlocks(container) {
+      if (!container || !container.children) return;
+      const toRemove = [];
+      Array.from(container.children).forEach((child) => {
+        if (this.isClaudeThinkingBlock(child)) toRemove.push(child);
+      });
+      toRemove.forEach((el) => el.remove());
+    }
+
     extractMessageHTML(element) {
       if (!element) return '';
       const clone = element.cloneNode(true);
       clone.querySelectorAll('button, [role="button"], .copy-button, .regenerate-button').forEach((btn) => btn.remove());
       clone.querySelectorAll('.avatar, [data-testid*="avatar"]').forEach((avatar) => avatar.remove());
       clone.querySelectorAll('svg').forEach((el) => el.remove());
+
+      const isClaude = window.platformAdapter && window.platformAdapter.getPlatformName() === 'Claude';
+      if (isClaude) {
+        const isUserRoot = clone.matches && clone.matches('[data-testid="user-message"]');
+        const isAiRoot = clone.matches && clone.matches('.font-claude-response');
+        if (isUserRoot) {
+          let html = (clone.innerHTML || '').trim();
+          html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+          html = html.replace(/<!--[\s\S]*?-->/g, '');
+          html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
+          return html.trim();
+        }
+        if (isAiRoot) {
+          this.removeClaudeThinkingBlocks(clone);
+          let html = (clone.innerHTML || '').trim();
+          html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+          html = html.replace(/<!--[\s\S]*?-->/g, '');
+          html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
+          return html.trim();
+        }
+        const userRoot = clone.querySelector('[data-testid="user-message"]');
+        if (userRoot) {
+          let html = (userRoot.innerHTML || '').trim();
+          html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+          html = html.replace(/<!--[\s\S]*?-->/g, '');
+          html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
+          return html.trim();
+        }
+        const aiRoot = clone.querySelector('.font-claude-response');
+        if (aiRoot) {
+          this.removeClaudeThinkingBlocks(aiRoot);
+          let html = (aiRoot.innerHTML || '').trim();
+          html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+          html = html.replace(/<!--[\s\S]*?-->/g, '');
+          html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
+          return html.trim();
+        }
+      }
+
       const contentElement = clone.querySelector('[data-message-author-role], .markdown, .message-content, [class*="prose"]') || clone;
       let html = contentElement.innerHTML || '';
       html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
@@ -367,37 +429,63 @@
       clone.querySelectorAll('.avatar, [data-testid*="avatar"], img[alt*="avatar"]').forEach((avatar) => avatar.remove());
       clone.querySelectorAll('svg').forEach((el) => el.remove());
       let html = '';
-      let usedBlocks = [];
-      const roleContainer = clone.querySelector('[data-message-author-role]');
-      if (roleContainer) {
-        html = (roleContainer.innerHTML || '').trim();
-        usedBlocks = [roleContainer];
-      } else {
-        const contentBlocks = clone.querySelectorAll('.markdown, .message-content, [class*="prose"]');
-        const blocksArray = Array.from(contentBlocks);
-        const topLevelBlocks = blocksArray.filter((el) => !blocksArray.some((other) => other !== el && other.contains(el)));
-        const rootBlock = blocksArray.find((el) => blocksArray.every((other) => el === other || el.contains(other)));
-        if (rootBlock) {
-          html = (rootBlock.innerHTML || '').trim();
-          usedBlocks = [rootBlock];
-        } else if (topLevelBlocks.length === 1) {
-          html = (topLevelBlocks[0].innerHTML || '').trim();
-          usedBlocks = [topLevelBlocks[0]];
-        } else if (topLevelBlocks.length > 1) {
-          const parent = topLevelBlocks[0].parentElement;
-          if (parent && clone.contains(parent)) {
-            html = (parent.innerHTML || '').trim();
-            usedBlocks = [parent];
-          } else {
-            html = topLevelBlocks.map((el) => (el.innerHTML || '').trim()).filter(Boolean).join('\n\n');
+
+      const isClaude = window.platformAdapter && window.platformAdapter.getPlatformName() === 'Claude';
+      if (isClaude) {
+        const isUserRoot = clone.matches && clone.matches('[data-testid="user-message"]');
+        const isAiRoot = clone.matches && clone.matches('.font-claude-response');
+        if (isUserRoot) {
+          html = (clone.innerHTML || '').trim();
+        } else if (isAiRoot) {
+          this.removeClaudeThinkingBlocks(clone);
+          html = (clone.innerHTML || '').trim();
+        } else {
+          const userRoot = clone.querySelector('[data-testid="user-message"]');
+          if (userRoot) html = (userRoot.innerHTML || '').trim();
+          else {
+            const aiRoot = clone.querySelector('.font-claude-response');
+            if (aiRoot) {
+              this.removeClaudeThinkingBlocks(aiRoot);
+              html = (aiRoot.innerHTML || '').trim();
+            }
           }
         }
       }
+
+      if (!html) {
+        let usedBlocks = [];
+        const roleContainer = clone.querySelector('[data-message-author-role]');
+        if (roleContainer) {
+          html = (roleContainer.innerHTML || '').trim();
+          usedBlocks = [roleContainer];
+        } else {
+          const contentBlocks = clone.querySelectorAll('.markdown, .message-content, [class*="prose"]');
+          const blocksArray = Array.from(contentBlocks);
+          const topLevelBlocks = blocksArray.filter((el) => !blocksArray.some((other) => other !== el && other.contains(el)));
+          const rootBlock = blocksArray.find((el) => blocksArray.every((other) => el === other || el.contains(other)));
+          if (rootBlock) {
+            html = (rootBlock.innerHTML || '').trim();
+            usedBlocks = [rootBlock];
+          } else if (topLevelBlocks.length === 1) {
+            html = (topLevelBlocks[0].innerHTML || '').trim();
+            usedBlocks = [topLevelBlocks[0]];
+          } else if (topLevelBlocks.length > 1) {
+            const parent = topLevelBlocks[0].parentElement;
+            if (parent && clone.contains(parent)) {
+              html = (parent.innerHTML || '').trim();
+              usedBlocks = [parent];
+            } else {
+              html = topLevelBlocks.map((el) => (el.innerHTML || '').trim()).filter(Boolean).join('\n\n');
+            }
+          }
+        }
+      }
+
       html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
       html = html.replace(/<!--[\s\S]*?-->/g, '');
       html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
       html = html.replace(/<a\s+/gi, '<a target="_blank" rel="noopener noreferrer" ');
-      html = html.replace(/<p>/gi, '<p class="toc-expanded-p">').replace(/<ul>/gi, '<ul class="toc-expanded-ul">').replace(/<ol>/gi, '<ol class="toc-expanded-ol">').replace(/<li>/gi, '<li class="toc-expanded-li">').replace(/<pre>/gi, '<pre class="toc-expanded-pre">').replace(/<code>/gi, '<code class="toc-expanded-code">').replace(/<h([1-6])>/gi, '<h$1 class="toc-expanded-h$1">').replace(/<blockquote>/gi, '<blockquote class="toc-expanded-blockquote">').replace(/<strong>/gi, '<strong class="toc-expanded-strong">').replace(/<b>/gi, '<b class="toc-expanded-b">').replace(/<br\s*\/?>/gi, '<br>');
+      html = html.replace(/<p>/gi, '<p class="toc-expanded-p">').replace(/<ul>/gi, '<ul class="toc-expanded-ul">').replace(/<ol>/gi, '<ol class="toc-expanded-ol">').replace(/<li>/gi, '<li class="toc-expanded-li">').replace(/<pre>/gi, '<pre class="toc-expanded-pre">').replace(/<code>/gi, '<code class="toc-expanded-code">').replace(/<h([1-6])(\s[^>]*)?\/?>/gi, '<h$1 class="toc-expanded-h$1">').replace(/<blockquote>/gi, '<blockquote class="toc-expanded-blockquote">').replace(/<strong>/gi, '<strong class="toc-expanded-strong">').replace(/<b>/gi, '<b class="toc-expanded-b">').replace(/<br\s*\/?>/gi, '<br>');
       html = html.trim();
       html = this.stripMediaElements(html);
       html = this.deduplicateMediaBySrc(html);

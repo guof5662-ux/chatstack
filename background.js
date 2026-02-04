@@ -7,7 +7,8 @@
 const SUPPORTED_DOMAINS = [
   'chat.openai.com',
   'chatgpt.com',
-  'gemini.google.com'
+  'gemini.google.com',
+  'claude.ai'
 ];
 
 chrome.action.onClicked.addListener(async (tab) => {
