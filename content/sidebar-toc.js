@@ -52,6 +52,7 @@
       return count;
     }
 
+    /** TOC 展开/收起：根据 data-expanded 切换，更新 collapsible 样式、aria-expanded、按钮文案与图标（展开↔收起） */
     toggleTocItemExpand(tocItem, messageId) {
       if (!tocItem) return;
       const isExpanded = tocItem.getAttribute('data-expanded') === 'true';
@@ -181,7 +182,7 @@
       root.className = 'toc-msg-search-float';
       root.setAttribute('role', 'search');
       root.setAttribute('aria-label', this._t('msgSearch.ariaLabel'));
-      root.innerHTML = '<span class="toc-msg-search-float-icon toc-msg-search-float-icon-svg" aria-hidden="true">' + this.sidebar.getIcon('search') + '</span><input type="text" class="toc-msg-search-float-input" placeholder="' + this._t('msgSearch.placeholder') + '"><button type="button" class="toc-msg-search-float-close" title="' + this._t('action.close') + '">' + this.sidebar.getIcon('close') + '</button>';
+      root.innerHTML = '<span class="toc-msg-search-float-icon toc-msg-search-float-icon-svg" aria-hidden="true">' + this.sidebar.getIcon('search') + '</span><input type="text" class="toc-msg-search-float-input" placeholder="' + this._t('msgSearch.placeholder') + '"><button type="button" class="toc-msg-search-float-close" title="' + this._t('action.close') + '" aria-label="' + this._t('action.close') + '">' + this.sidebar.getIcon('close') + '</button>';
       const panel = tocItem.closest('.tab-panel') || this.shadowRoot.querySelector('[data-panel="toc"]');
       const nextItem = tocItem.nextElementSibling && tocItem.nextElementSibling.classList.contains('toc-item') ? tocItem.nextElementSibling : null;
       if (panel && nextItem) {

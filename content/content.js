@@ -27,6 +27,7 @@ class SidebarExtension {
     }
   }
 
+  /** 主容器解析顺序：先 platformAdapter.getMainContainer，再按 hostname 回退（main / Claude / DeepSeek 选择器），供注入与观测用 */
   getReadyContainer() {
     if (window.platformAdapter && typeof window.platformAdapter.getMainContainer === 'function') {
       const container = window.platformAdapter.getMainContainer();

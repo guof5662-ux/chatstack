@@ -247,6 +247,7 @@ class SidebarUI {
     return urls[name] || urls.ChatGPT;
   }
 
+  /** 导出条 HTML：scope 为 toc | history | projects，对应当前对话/历史/项目三种导出范围 */
   getExportBarHTML(scope) {
     return this.exportMod ? this.exportMod.getExportBarHTML(scope) : '';
   }
@@ -394,7 +395,7 @@ class SidebarUI {
                 <button type="button" class="toc-filter-btn" data-filter-role="user"><span data-i18n="filter.user">用户</span></button>
                 <button type="button" class="toc-filter-btn" data-filter-role="assistant"><span data-i18n="filter.ai">AI</span></button>
                 <button type="button" class="toc-filter-btn" data-filter-favorite="true" id="toc-filter-favorite">${this.getIcon('star')} <span data-i18n="filter.favorite">收藏</span></button>
-                <button type="button" class="toc-filter-btn toc-add-to-project-btn" id="toc-btn-add-to-project" data-i18n-title="filter.addToProject" title="添加到项目">${this.getIcon('folderAdd')} <span data-i18n="filter.addToProject">添加到项目</span></button>
+                <button type="button" class="toc-filter-btn toc-add-to-project-btn" id="toc-btn-add-to-project" data-i18n-title="filter.addToProject" data-i18n-aria-label="filter.addToProject" title="添加到项目" aria-label="添加到项目">${this.getIcon('folderAdd')} <span data-i18n="filter.addToProject">添加到项目</span></button>
               </div>
             </div>
             <div class="toc-view-scroll">
@@ -432,14 +433,14 @@ class SidebarUI {
                       <label class="filter-panel-label" data-i18n="filter.startDate">开始日期</label>
                       <div class="filter-date-wrap">
                         <input type="text" class="filter-date-input" id="conv-filter-start-date" placeholder="yyyy/mm/dd" />
-                        <button type="button" class="filter-date-calendar-btn" data-for="conv-filter-start-date" data-i18n-title="filter.selectDate" title="选择日期">${this.getIcon('calendar')}</button>
+                        <button type="button" class="filter-date-calendar-btn" data-for="conv-filter-start-date" data-i18n-title="filter.selectDate" data-i18n-aria-label="filter.selectDate" title="选择日期" aria-label="选择日期">${this.getIcon('calendar')}</button>
                       </div>
                     </div>
                     <div class="filter-date-group">
                       <label class="filter-panel-label" data-i18n="filter.endDate">结束日期</label>
                       <div class="filter-date-wrap">
                         <input type="text" class="filter-date-input" id="conv-filter-end-date" placeholder="yyyy/mm/dd" />
-                        <button type="button" class="filter-date-calendar-btn" data-for="conv-filter-end-date" data-i18n-title="filter.selectDate" title="选择日期">${this.getIcon('calendar')}</button>
+                        <button type="button" class="filter-date-calendar-btn" data-for="conv-filter-end-date" data-i18n-title="filter.selectDate" data-i18n-aria-label="filter.selectDate" title="选择日期" aria-label="选择日期">${this.getIcon('calendar')}</button>
                       </div>
                     </div>
                   </div>
@@ -473,7 +474,7 @@ class SidebarUI {
                   <button type="button" class="toc-filter-btn" data-filter-role="user"><span data-i18n="filter.user">用户</span></button>
                   <button type="button" class="toc-filter-btn" data-filter-role="assistant"><span data-i18n="filter.ai">AI</span></button>
                   <button type="button" class="toc-filter-btn" data-filter-favorite="true">${this.getIcon('star')} <span data-i18n="filter.favorite">收藏</span></button>
-                  <button type="button" class="toc-filter-btn toc-add-to-project-btn" id="conv-detail-add-to-project" data-i18n-title="filter.addToProject" title="添加到项目">${this.getIcon('folderAdd')} <span data-i18n="filter.addToProject">添加到项目</span></button>
+                  <button type="button" class="toc-filter-btn toc-add-to-project-btn" id="conv-detail-add-to-project" data-i18n-title="filter.addToProject" data-i18n-aria-label="filter.addToProject" title="添加到项目" aria-label="添加到项目">${this.getIcon('folderAdd')} <span data-i18n="filter.addToProject">添加到项目</span></button>
                   </div>
                 </div>
                 <div class="search-box conv-detail-search-wrap">
@@ -512,14 +513,14 @@ class SidebarUI {
                     <label class="filter-panel-label" data-i18n="filter.startDate">开始日期</label>
                     <div class="filter-date-wrap">
                       <input type="text" class="filter-date-input" id="projects-filter-start-date" placeholder="yyyy/mm/dd" />
-                      <button type="button" class="filter-date-calendar-btn" data-for="projects-filter-start-date" data-i18n-title="filter.selectDate" title="选择日期">${this.getIcon('calendar')}</button>
+                      <button type="button" class="filter-date-calendar-btn" data-for="projects-filter-start-date" data-i18n-title="filter.selectDate" data-i18n-aria-label="filter.selectDate" title="选择日期" aria-label="选择日期">${this.getIcon('calendar')}</button>
                     </div>
                   </div>
                   <div class="filter-date-group">
                     <label class="filter-panel-label" data-i18n="filter.endDate">结束日期</label>
                     <div class="filter-date-wrap">
                       <input type="text" class="filter-date-input" id="projects-filter-end-date" placeholder="yyyy/mm/dd" />
-                      <button type="button" class="filter-date-calendar-btn" data-for="projects-filter-end-date" data-i18n-title="filter.selectDate" title="选择日期">${this.getIcon('calendar')}</button>
+                      <button type="button" class="filter-date-calendar-btn" data-for="projects-filter-end-date" data-i18n-title="filter.selectDate" data-i18n-aria-label="filter.selectDate" title="选择日期" aria-label="选择日期">${this.getIcon('calendar')}</button>
                     </div>
                   </div>
                 </div>
@@ -1104,12 +1105,34 @@ async applySavedWidth() {
     }
 
     const tabButtons = this.shadowRoot.querySelectorAll('.tab-button');
+    const tabOrder = ['toc', 'conversations', 'projects'];
     tabButtons.forEach(btn => {
+      btn.setAttribute('role', 'tab');
       btn.addEventListener('click', (e) => {
         const tab = (e.currentTarget || e.target).getAttribute('data-tab');
         if (tab) this.switchTab(tab);
       });
+      btn.addEventListener('keydown', (e) => {
+        const tab = btn.getAttribute('data-tab');
+        if (!tab) return;
+        let nextTab = null;
+        if (e.key === 'ArrowRight') {
+          const idx = tabOrder.indexOf(tab);
+          nextTab = tabOrder[idx + 1] || tabOrder[0];
+        } else if (e.key === 'ArrowLeft') {
+          const idx = tabOrder.indexOf(tab);
+          nextTab = tabOrder[idx - 1] != null ? tabOrder[idx - 1] : tabOrder[tabOrder.length - 1];
+        }
+        if (nextTab) {
+          e.preventDefault();
+          this.switchTab(nextTab);
+          const nextBtn = this.shadowRoot.querySelector(`.tab-button[data-tab="${nextTab}"]`);
+          if (nextBtn) nextBtn.focus();
+        }
+      });
     });
+    const tabList = this.shadowRoot.querySelector('.tab-nav');
+    if (tabList) tabList.setAttribute('role', 'tablist');
 
     this.shadowRoot.getElementById('btn-sidebar-settings')?.addEventListener('click', () => {
       if (this.currentTab === 'settings') {
@@ -1629,12 +1652,12 @@ async applySavedWidth() {
       this.container.classList.toggle('settings-only', tabName === 'settings');
     }
 
-    // 更新 Tab 按钮状态
+    // 更新 Tab 按钮状态与 aria-selected（键盘/无障碍）
     this.shadowRoot.querySelectorAll('.tab-button').forEach(btn => {
       btn.classList.remove('active');
-      if (btn.getAttribute('data-tab') === tabName) {
-        btn.classList.add('active');
-      }
+      const isActive = btn.getAttribute('data-tab') === tabName;
+      if (isActive) btn.classList.add('active');
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
     // 头部设置按钮：仅在 settings 面板时高亮
     const headerSettingsBtn = this.shadowRoot.getElementById('btn-sidebar-settings');
@@ -1927,7 +1950,7 @@ async applySavedWidth() {
                 <div class="toc-preview-fade" aria-hidden="true"></div>
               </div>
               <div class="toc-expand-btn-row">
-                <button type="button" class="toc-expand-text-btn" data-action="expand">
+                <button type="button" class="toc-expand-text-btn" data-action="expand" aria-label="${expandText}">
                   <span class="toc-expand-text">${expandText}</span>
                   <span class="toc-expand-icon toc-expand-icon-svg" aria-hidden="true">${expandIcon}</span>
                 </button>
@@ -1938,10 +1961,10 @@ async applySavedWidth() {
           </div>
         </div>
         <div class="toc-item-actions">
-          ${hasLongContent ? `<button type="button" class="toc-action-btn toc-collapse-btn" title="${this._t('toc.collapse')}" data-action="expand">${this.getIcon('chevronUp')}</button>` : ''}
-          <button type="button" class="toc-action-btn" title="${this._t('toc.searchInMessage')}" data-action="search">${this.getIcon('search')}</button>
-          <button type="button" class="toc-action-btn" title="${this._t('toc.copy')}" data-action="copy">${this.getIcon('copy')}</button>
-          <button type="button" class="toc-action-btn toc-action-fav" title="${this._t('toc.favorite')}" data-action="favorite" data-fav="${isFav ? '1' : '0'}">${isFav ? this.getIcon('star') : this.getIcon('starOutline')}</button>
+          ${hasLongContent ? `<button type="button" class="toc-action-btn toc-collapse-btn" title="${this._t('toc.collapse')}" aria-label="${this._t('toc.collapse')}" data-action="expand">${this.getIcon('chevronUp')}</button>` : ''}
+          <button type="button" class="toc-action-btn" title="${this._t('toc.searchInMessage')}" aria-label="${this._t('toc.searchInMessage')}" data-action="search">${this.getIcon('search')}</button>
+          <button type="button" class="toc-action-btn" title="${this._t('toc.copy')}" aria-label="${this._t('toc.copy')}" data-action="copy">${this.getIcon('copy')}</button>
+          <button type="button" class="toc-action-btn toc-action-fav" title="${this._t('toc.favorite')}" aria-label="${this._t('toc.favorite')}" data-action="favorite" data-fav="${isFav ? '1' : '0'}">${isFav ? this.getIcon('star') : this.getIcon('starOutline')}</button>
         </div>
         ${hasMatch ? `<span class="toc-match-badge">${this.escapeHtml(matchLabel)}</span>` : ''}
       </li>`;
@@ -2033,6 +2056,7 @@ async applySavedWidth() {
     } catch (e) { this.log('toggleTocFavorite error:', e); }
   }
 
+  /** TOC 展开/收起：委托 tocMod 切换 data-expanded、collapsible 样式与按钮文案 */
   toggleTocItemExpand(tocItem, messageId) {
     if (this.tocMod) this.tocMod.toggleTocItemExpand(tocItem, messageId);
   }
@@ -2456,9 +2480,9 @@ async applySavedWidth() {
                   <div class="conv-card-header">
                     <div class="conv-card-title conv-card-title-editable" title="${this.escapeHtml(this._t('conv.editTitleHint'))}">${titleHtml}</div>
                     <div class="conv-card-actions">
-                      <button type="button" class="conv-card-action" data-action="open" title="${this.escapeHtml(this._t('conv.openInNewTab'))}">${this.getIcon('external')}</button>
-                      <button type="button" class="conv-card-action" data-action="add-to-project" title="${this.escapeHtml(this._t('filter.addToProject'))}">${this.getIcon('folderAdd')}</button>
-                      <button type="button" class="conv-card-action conv-card-action--delete" data-action="delete" title="${this.escapeHtml(this._t('conv.delete'))}">${this.getIcon('trash')}</button>
+                      <button type="button" class="conv-card-action" data-action="open" title="${this.escapeHtml(this._t('conv.openInNewTab'))}" aria-label="${this.escapeHtml(this._t('conv.openInNewTab'))}">${this.getIcon('external')}</button>
+                      <button type="button" class="conv-card-action" data-action="add-to-project" title="${this.escapeHtml(this._t('filter.addToProject'))}" aria-label="${this.escapeHtml(this._t('filter.addToProject'))}">${this.getIcon('folderAdd')}</button>
+                      <button type="button" class="conv-card-action conv-card-action--delete" data-action="delete" title="${this.escapeHtml(this._t('conv.delete'))}" aria-label="${this.escapeHtml(this._t('conv.delete'))}">${this.getIcon('trash')}</button>
                     </div>
                   </div>
                   <div class="conv-card-snippet">${snippetHtml}</div>
@@ -2480,7 +2504,7 @@ async applySavedWidth() {
         const convListSection = filteredEntries.length === 0
           ? `<ul class="project-conversations"><li class="project-conv-empty">${this.escapeHtml(noConvs)}</li></ul>`
           : `<div class="project-conversations">${cardListHtml}</div>`;
-        const deleteBtn = showDeleteBtn ? `<button type="button" class="project-header-action" data-action="delete-project" title="${this.escapeHtml(this._t('project.removeCategory'))}">${this.getIcon('trash')}</button>` : '';
+        const deleteBtn = showDeleteBtn ? `<button type="button" class="project-header-action" data-action="delete-project" title="${this.escapeHtml(this._t('project.removeCategory'))}" aria-label="${this.escapeHtml(this._t('project.removeCategory'))}">${this.getIcon('trash')}</button>` : '';
         const expandedClass = expandByDefault ? ' expanded' : '';
         return `
         <li class="project-item${expandedClass}" data-project-type="auto" data-project-key="${this.escapeHtml(key)}">
@@ -2870,13 +2894,13 @@ async applySavedWidth() {
           '<div class="toc-index" title="' + this.escapeHtml(roleLabel) + '">#' + num + '</div>' +
           '<div class="toc-meta"><span class="toc-role-icon" aria-hidden="true">' + roleIcon + '</span>' + this.escapeHtml(roleLabel) + '</div>' +
           '<div class="toc-content-wrapper">' +
-            (hasLongContent ? '<div class="toc-content-collapsible' + expandClass + '" aria-expanded="' + expandAria + '"><div class="toc-content-full">' + fullContentHtml + '</div><div class="toc-preview-fade" aria-hidden="true"></div></div><div class="toc-expand-btn-row"><button type="button" class="toc-expand-text-btn" data-action="expand"><span class="toc-expand-text">' + expandText + '</span><span class="toc-expand-icon toc-expand-icon-svg" aria-hidden="true">' + expandIcon + '</span></button></div>' : '<div class="toc-content-full toc-content-full-standalone">' + fullContentHtml + '</div>') +
+            (hasLongContent ? '<div class="toc-content-collapsible' + expandClass + '" aria-expanded="' + expandAria + '"><div class="toc-content-full">' + fullContentHtml + '</div><div class="toc-preview-fade" aria-hidden="true"></div></div><div class="toc-expand-btn-row"><button type="button" class="toc-expand-text-btn" data-action="expand" aria-label="' + this.escapeHtml(expandText) + '"><span class="toc-expand-text">' + expandText + '</span><span class="toc-expand-icon toc-expand-icon-svg" aria-hidden="true">' + expandIcon + '</span></button></div>' : '<div class="toc-content-full toc-content-full-standalone">' + fullContentHtml + '</div>') +
           '</div>' +
         '</div>' +
         '<div class="toc-item-actions">' +
-          (hasLongContent ? '<button type="button" class="toc-action-btn toc-collapse-btn" title="' + this._t('toc.collapse') + '" data-action="expand">' + this.getIcon('chevronUp') + '</button>' : '') +
-          '<button type="button" class="toc-action-btn" title="' + this._t('toc.copy') + '" data-action="copy" data-content="' + this.escapeHtml(content) + '">' + this.getIcon('copy') + '</button>' +
-          '<button type="button" class="toc-action-btn toc-action-fav" title="' + this._t('toc.favorite') + '" data-action="favorite" data-fav="' + (isFav ? '1' : '0') + '">' + (isFav ? this.getIcon('star') : this.getIcon('starOutline')) + '</button>' +
+          (hasLongContent ? '<button type="button" class="toc-action-btn toc-collapse-btn" title="' + this._t('toc.collapse') + '" aria-label="' + this._t('toc.collapse') + '" data-action="expand">' + this.getIcon('chevronUp') + '</button>' : '') +
+          '<button type="button" class="toc-action-btn" title="' + this._t('toc.copy') + '" aria-label="' + this._t('toc.copy') + '" data-action="copy" data-content="' + this.escapeHtml(content) + '">' + this.getIcon('copy') + '</button>' +
+          '<button type="button" class="toc-action-btn toc-action-fav" title="' + this._t('toc.favorite') + '" aria-label="' + this._t('toc.favorite') + '" data-action="favorite" data-fav="' + (isFav ? '1' : '0') + '">' + (isFav ? this.getIcon('star') : this.getIcon('starOutline')) + '</button>' +
         '</div>' +
         (hasMatch ? '<span class="toc-match-badge">' + this.escapeHtml(matchLabel) + '</span>' : '') +
       '</li>';
@@ -3155,7 +3179,7 @@ async applySavedWidth() {
                     <div class="toc-preview-fade" aria-hidden="true"></div>
                   </div>
                   <div class="toc-expand-btn-row">
-                    <button type="button" class="toc-expand-text-btn" data-action="expand">
+                    <button type="button" class="toc-expand-text-btn" data-action="expand" aria-label="${this.escapeHtml(expandText)}">
                       <span class="toc-expand-text">${this.escapeHtml(expandText)}</span>
                       <span class="toc-expand-icon toc-expand-icon-svg" aria-hidden="true">${expandIcon}</span>
                     </button>
@@ -3166,8 +3190,8 @@ async applySavedWidth() {
               </div>
             </div>
             <div class="toc-item-actions">
-              <button type="button" class="toc-action-btn" title="${this.escapeHtml(this._t('toc.copy'))}" data-action="copy" data-content="${safeContent}">${this.getIcon('copy')}</button>
-              <button type="button" class="toc-action-btn toc-action-fav" title="${this.escapeHtml(this._t('toc.favorite'))}" data-action="favorite" data-fav="${isFav ? '1' : '0'}">${isFav ? this.getIcon('star') : this.getIcon('starOutline')}</button>
+              <button type="button" class="toc-action-btn" title="${this.escapeHtml(this._t('toc.copy'))}" aria-label="${this.escapeHtml(this._t('toc.copy'))}" data-action="copy" data-content="${safeContent}">${this.getIcon('copy')}</button>
+              <button type="button" class="toc-action-btn toc-action-fav" title="${this.escapeHtml(this._t('toc.favorite'))}" aria-label="${this.escapeHtml(this._t('toc.favorite'))}" data-action="favorite" data-fav="${isFav ? '1' : '0'}">${isFav ? this.getIcon('star') : this.getIcon('starOutline')}</button>
             </div>
           </li>`;
       }).join('') + `</ul>`;
@@ -3569,9 +3593,9 @@ async applySavedWidth() {
                   <div class="conv-card-header">
                     <div class="conv-card-title conv-card-title-editable" title="${this.escapeHtml(this._t('conv.editTitleHint'))}">${titleHtml}</div>
                     <div class="conv-card-actions">
-                      <button type="button" class="conv-card-action" data-action="open" title="${this.escapeHtml(this._t('conv.openInNewTab'))}">${this.getIcon('external')}</button>
-                      ${projectType === 'my' ? `<button type="button" class="conv-card-action" data-action="move" data-conv-id="${this.escapeHtml(item.id)}" title="${this.escapeHtml(this._t('action.move'))}">${this.getIcon('move')}</button>` : ''}
-                      ${projectType === 'my' ? `<button type="button" class="conv-card-action conv-card-action--delete" data-action="remove-from-project" data-conv-id="${this.escapeHtml(item.id)}" title="${this.escapeHtml(this._t('conv.removeFromProject'))}">${this.getIcon('trash')}</button>` : ''}
+                      <button type="button" class="conv-card-action" data-action="open" title="${this.escapeHtml(this._t('conv.openInNewTab'))}" aria-label="${this.escapeHtml(this._t('conv.openInNewTab'))}">${this.getIcon('external')}</button>
+                      ${projectType === 'my' ? `<button type="button" class="conv-card-action" data-action="move" data-conv-id="${this.escapeHtml(item.id)}" title="${this.escapeHtml(this._t('action.move'))}" aria-label="${this.escapeHtml(this._t('action.move'))}">${this.getIcon('move')}</button>` : ''}
+                      ${projectType === 'my' ? `<button type="button" class="conv-card-action conv-card-action--delete" data-action="remove-from-project" data-conv-id="${this.escapeHtml(item.id)}" title="${this.escapeHtml(this._t('conv.removeFromProject'))}" aria-label="${this.escapeHtml(this._t('conv.removeFromProject'))}">${this.getIcon('trash')}</button>` : ''}
                     </div>
                   </div>
                   <div class="conv-card-snippet">${snippetHtml}</div>
@@ -3619,8 +3643,8 @@ async applySavedWidth() {
           ? `<ul class="project-conversations"><li class="project-conv-empty">${this.escapeHtml(this._t('project.noConvs'))}</li></ul>`
           : `<div class="project-conversations">${cardListHtml}${detailViewHtml}</div>`;
 
-      const editBtn = projectType === 'my' ? `<button type="button" class="project-header-action" data-action="edit-project" title="${this.escapeHtml(this._t('project.editTitle'))}">${this.getIcon('edit')}</button>` : '';
-      const deleteBtn = `<button type="button" class="project-header-action" data-action="delete-project" title="${this.escapeHtml(projectType === 'my' ? this._t('project.deleteProject') : this._t('project.removeCategory'))}">${this.getIcon('trash')}</button>`;
+      const editBtn = projectType === 'my' ? `<button type="button" class="project-header-action" data-action="edit-project" title="${this.escapeHtml(this._t('project.editTitle'))}" aria-label="${this.escapeHtml(this._t('project.editTitle'))}">${this.getIcon('edit')}</button>` : '';
+      const deleteBtn = `<button type="button" class="project-header-action" data-action="delete-project" title="${this.escapeHtml(projectType === 'my' ? this._t('project.deleteProject') : this._t('project.removeCategory'))}" aria-label="${this.escapeHtml(projectType === 'my' ? this._t('project.deleteProject') : this._t('project.removeCategory'))}">${this.getIcon('trash')}</button>`;
       const expandedClass = projKwLower && (entries.length > 0 || projectName.toLowerCase().includes(projKwLower)) ? ' expanded' : '';
       return `
         <li class="project-item${expandedClass}" data-project-type="${projectType}" data-project-key="${this.escapeHtml(projectKey)}">
@@ -4190,8 +4214,11 @@ async applySavedWidth() {
    * @param {function} [onCancel] - 取消回调
    */
   createDialog(title, placeholder, onConfirm, defaultValue = '', onCancel) {
+    const previousActive = document.activeElement;
     const overlay = document.createElement('div');
     overlay.className = 'dialog-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
 
     const dialog = document.createElement('div');
     dialog.className = 'dialog';
@@ -4208,26 +4235,48 @@ async applySavedWidth() {
     overlay.appendChild(dialog);
 
     const inputEl = dialog.querySelector('#dialog-input');
+    const cancelBtn = dialog.querySelector('#dialog-cancel');
+    const confirmBtn = dialog.querySelector('#dialog-confirm');
+    const focusables = [inputEl, cancelBtn, confirmBtn];
     if (defaultValue) inputEl.value = defaultValue;
     inputEl.focus();
     inputEl.select();
 
-    // 事件绑定
-    dialog.querySelector('#dialog-cancel').addEventListener('click', () => {
-      if (onCancel) onCancel();
+    const remove = () => {
       overlay.remove();
+      if (previousActive && typeof previousActive.focus === 'function') previousActive.focus();
+    };
+
+    cancelBtn.addEventListener('click', () => {
+      if (onCancel) onCancel();
+      remove();
     });
 
     const doConfirm = () => {
       const value = inputEl.value;
-      overlay.remove();
+      remove();
       onConfirm(value);
     };
 
-    dialog.querySelector('#dialog-confirm').addEventListener('click', doConfirm);
+    confirmBtn.addEventListener('click', doConfirm);
 
     inputEl.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') doConfirm();
+    });
+
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (onCancel) onCancel();
+        remove();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const idx = focusables.indexOf(document.activeElement);
+      if (idx === -1) return;
+      e.preventDefault();
+      const next = e.shiftKey ? (idx - 1 + focusables.length) % focusables.length : (idx + 1) % focusables.length;
+      focusables[next].focus();
     });
 
     return overlay;
@@ -4241,8 +4290,11 @@ async applySavedWidth() {
    */
   showConfirmDialog(title, message) {
     return new Promise((resolve) => {
+      const previousActive = document.activeElement;
       const overlay = document.createElement('div');
       overlay.className = 'dialog-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
 
       const dialog = document.createElement('div');
       dialog.className = 'dialog';
@@ -4259,15 +4311,34 @@ async applySavedWidth() {
       overlay.appendChild(dialog);
       (this.container || this.shadowRoot).appendChild(overlay);
 
-      dialog.querySelector('#dialog-cancel').addEventListener('click', () => {
+      const cancelBtn = dialog.querySelector('#dialog-cancel');
+      const confirmBtn = dialog.querySelector('#dialog-confirm');
+      const focusables = [cancelBtn, confirmBtn];
+
+      const close = (result) => {
         overlay.remove();
-        resolve(false);
+        resolve(result);
+        if (previousActive && typeof previousActive.focus === 'function') previousActive.focus();
+      };
+
+      cancelBtn.addEventListener('click', () => close(false));
+      confirmBtn.addEventListener('click', () => close(true));
+
+      overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close(false);
+          return;
+        }
+        if (e.key !== 'Tab') return;
+        const idx = focusables.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        const next = e.shiftKey ? (idx - 1 + focusables.length) % focusables.length : (idx + 1) % focusables.length;
+        focusables[next].focus();
       });
 
-      dialog.querySelector('#dialog-confirm').addEventListener('click', () => {
-        overlay.remove();
-        resolve(true);
-      });
+      cancelBtn.focus();
     });
   }
 

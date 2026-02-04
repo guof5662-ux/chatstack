@@ -1,6 +1,10 @@
 /**
  * ChatGPT 页面适配器 - 负责解析 ChatGPT 页面的 DOM 结构
  * 继承 BasePlatformAdapter，实现 ChatGPT 特定的解析逻辑
+ *
+ * 站点与 URL：https://chatgpt.com、https://chat.openai.com；对话页 /c/{id} 或 /g/.../c/{id}
+ * 依赖 DOM（见 content/sites-config.js）：container/main、userItem、assistantItem、turnItem、articleContainer、fallbackGroup
+ * 改版时：同步更新 sites-config.js 中 chatgpt.com / chat.openai.com 的 selectors 与本 adapter 内硬编码选择器
  */
 
 class ChatGPTAdapter extends BasePlatformAdapter {
