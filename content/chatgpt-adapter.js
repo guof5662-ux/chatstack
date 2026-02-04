@@ -6,25 +6,22 @@
 class ChatGPTAdapter extends BasePlatformAdapter {
   constructor() {
     super();
-    // ChatGPT 特有配置（如果有）
+    this.siteConfig = typeof getSiteConfig === 'function' ? getSiteConfig(window.location.hostname) : null;
+  }
+
+  _sel(key, fallback) {
+    const s = this.siteConfig?.selectors?.[key];
+    return (typeof s === 'string' ? s : null) || fallback;
   }
 
   // ===== 实现抽象方法 =====
 
-  /**
-   * 返回平台名称
-   * @returns {string}
-   */
   getPlatformName() {
-    return 'ChatGPT';
+    return this.siteConfig?.platformName || 'ChatGPT';
   }
 
-  /**
-   * 返回平台图标 URL
-   * @returns {string}
-   */
   getPlatformIcon() {
-    return 'https://chatgpt.com/favicon.ico';
+    return this.siteConfig?.platformIcon || 'https://chatgpt.com/favicon.ico';
   }
 
   /**
@@ -68,16 +65,20 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         return messages;
       }
 
-      const container = document.querySelector('main') || document.querySelector('[role="main"]') || document.body;
-      const articleContainers = container.querySelectorAll('article');
+      const containerSel = this._sel('container', 'main');
+      const container = document.querySelector(containerSel) || document.querySelector('[role="main"]') || document.body;
+      const articleSel = this._sel('articleContainer', 'article');
+      const articleContainers = container.querySelectorAll(articleSel);
       const hasEdit = Array.from(articleContainers).some(el => this.isInEditMode(el));
       if (hasEdit) {
         this.log('User is editing, skip parsing');
         return messages;
       }
 
-      const userMessages = container.querySelectorAll('div[data-message-author-role="user"]');
-      const aiMessages = container.querySelectorAll('div[data-message-author-role="assistant"]');
+      const userSel = this._sel('userItem', 'div[data-message-author-role="user"]');
+      const assistantSel = this._sel('assistantItem', 'div[data-message-author-role="assistant"]');
+      const userMessages = container.querySelectorAll(userSel);
+      const aiMessages = container.querySelectorAll(assistantSel);
       if (userMessages.length > 0 || aiMessages.length > 0) {
         const allElements = [];
         userMessages.forEach(el => allElements.push({ element: el, role: 'user' }));
@@ -104,7 +105,8 @@ class ChatGPTAdapter extends BasePlatformAdapter {
         }
       }
 
-      const turnElements = document.querySelectorAll('[data-testid^="conversation-turn-"]');
+      const turnSel = this._sel('turnItem', '[data-testid^="conversation-turn-"]');
+      const turnElements = document.querySelectorAll(turnSel);
       if (turnElements.length > 0) {
         turnElements.forEach((el, index) => {
           const roleEl = el.querySelector('[data-message-author-role="user"]') ? 'user' : el.querySelector('[data-message-author-role="assistant"]') ? 'assistant' : null;
@@ -121,10 +123,11 @@ class ChatGPTAdapter extends BasePlatformAdapter {
       }
 
       let messageIndex = 0;
-      const allGroups = document.querySelectorAll('main [class*="group"], main .text-base');
+      const fallbackGroupSel = this._sel('fallbackGroup', 'main [class*="group"], main .text-base');
+      const allGroups = document.querySelectorAll(fallbackGroupSel);
       allGroups.forEach((element) => {
-        const hasUser = element.querySelector('[data-message-author-role="user"]');
-        const hasAssistant = element.querySelector('[data-message-author-role="assistant"]');
+        const hasUser = element.querySelector(userSel);
+        const hasAssistant = element.querySelector(assistantSel);
         let role = null;
         if (hasUser) role = 'user';
         else if (hasAssistant) role = 'assistant';

@@ -337,7 +337,7 @@ class PlatformAdapterFactory {
    * @returns {string[]}
    */
   static getSupportedPlatforms() {
-    return ['ChatGPT', 'Gemini', 'Claude'];
+    return ['ChatGPT', 'Gemini', 'Claude', 'DeepSeek'];
   }
 
   /**

@@ -452,6 +452,17 @@
         }
       }
 
+      const isDeepSeek = window.platformAdapter && window.platformAdapter.getPlatformName() === 'DeepSeek';
+      if (isDeepSeek && !html) {
+        const dsMessage = clone.querySelector('.ds-message');
+        if (dsMessage) {
+          // 移除思考块，只保留正式回复
+          dsMessage.querySelectorAll('.ds-think-content, .e1675d8b').forEach((el) => el.remove());
+          const dsMarkdown = dsMessage.querySelector('.ds-markdown');
+          if (dsMarkdown) html = (dsMarkdown.innerHTML || '').trim();
+        }
+      }
+
       if (!html) {
         let usedBlocks = [];
         const roleContainer = clone.querySelector('[data-message-author-role]');
@@ -484,6 +495,8 @@
       html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
       html = html.replace(/<!--[\s\S]*?-->/g, '');
       html = html.replace(/\sstyle="[^"]*"/gi, '').replace(/\sstyle='[^']*'/gi, '');
+      // 移除平台原有 class（Shadow DOM 内无效），确保下方 class 注入正确匹配
+      html = html.replace(/\sclass="[^"]*"/gi, '').replace(/\sclass='[^']*'/gi, '');
       html = html.replace(/<a\s+/gi, '<a target="_blank" rel="noopener noreferrer" ');
       html = html.replace(/<p>/gi, '<p class="toc-expanded-p">').replace(/<ul>/gi, '<ul class="toc-expanded-ul">').replace(/<ol>/gi, '<ol class="toc-expanded-ol">').replace(/<li>/gi, '<li class="toc-expanded-li">').replace(/<pre>/gi, '<pre class="toc-expanded-pre">').replace(/<code>/gi, '<code class="toc-expanded-code">').replace(/<h([1-6])(\s[^>]*)?\/?>/gi, '<h$1 class="toc-expanded-h$1">').replace(/<blockquote>/gi, '<blockquote class="toc-expanded-blockquote">').replace(/<strong>/gi, '<strong class="toc-expanded-strong">').replace(/<b>/gi, '<b class="toc-expanded-b">').replace(/<br\s*\/?>/gi, '<br>');
       html = html.trim();
