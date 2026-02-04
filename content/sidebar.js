@@ -38,6 +38,8 @@ class SidebarUI {
     this.projectSectionCollapsed = { auto: false, my: false };
     // 历史页：记录已展开的项目，避免重渲染后自动收回
     this.historyExpandedProjects = new Set();
+    // 历史页：记录已收起的分区（如 ChatGPT 的“项目/你的聊天”）
+    this.historySectionCollapsed = new Set();
     // 项目页：记录已展开的项目，避免重渲染后自动收回
     this.projectsExpandedItems = new Set();
     this.lastNonSettingsTab = 'toc';
@@ -121,7 +123,11 @@ class SidebarUI {
     if (name === 'Gemini') {
       return `https://gemini.google.com/app/${id}`;
     }
-    if (name === 'ChatGPT' || name === 'Claude') {
+    if (name === 'Claude') {
+      const pathId = id.replace(/_/g, '/');
+      return `https://claude.ai/chat/${pathId}`;
+    }
+    if (name === 'ChatGPT') {
       return `https://chatgpt.com/c/${id}`;
     }
     return `https://chatgpt.com/c/${id}`;
@@ -151,7 +157,7 @@ class SidebarUI {
     const urls = {
       ChatGPT: 'https://chatgpt.com/favicon.ico',
       Gemini: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
-      Claude: 'https://www.anthropic.com/favicon.ico',
+      Claude: 'https://claude.ai/favicon.ico',
     };
     return urls[name] || urls.ChatGPT;
   }
@@ -993,6 +999,17 @@ async applySavedWidth() {
         this.exportState.zip = target.checked;
       }
     });
+
+    const stopKeyPropagation = (e) => {
+      const target = e.target;
+      if (!target || !this.shadowRoot.contains(target)) return;
+      if (target.matches('input, textarea') || target.isContentEditable) {
+        e.stopPropagation();
+      }
+    };
+    this.shadowRoot.addEventListener('keydown', stopKeyPropagation);
+    this.shadowRoot.addEventListener('keyup', stopKeyPropagation);
+    this.shadowRoot.addEventListener('keypress', stopKeyPropagation);
 
     const searchInput = this.shadowRoot.getElementById('search-input');
     const runSearch = () => this.handleSearch(searchInput.value);
@@ -2333,13 +2350,21 @@ async applySavedWidth() {
           const hasProjects = projectsSectionItems.length > 0;
           const hasYourChats = yourChatsSectionHtml !== '';
           if (!hasProjects && !hasYourChats && kwLower) continue;
+          const projectsSectionKey = 'ChatGPT:projects';
+          const projectsCollapsed = !kwLower && this.historySectionCollapsed.has(projectsSectionKey);
+          const projectsToggleTitle = projectsCollapsed ? this._t('toc.expand') : this._t('toc.collapse');
           platformBlocks.push(`
           <div class="project-platform-block" data-platform="ChatGPT">
             <h4 class="project-platform-subtitle"><img class="project-section-icon" alt="" src="${this.escapeHtml(platformIconUrl)}" />${this.escapeHtml(platformTitle)}</h4>
             <div class="history-chatgpt-sections">
-              <div class="history-chatgpt-section">
-                <h5 class="history-chatgpt-section-title">${this.escapeHtml(projectsTitle)}</h5>
-                <ul class="project-list">${hasProjects ? projectsSectionItems.join('') : '<li class="project-conv-empty">' + this.escapeHtml(this._t('empty.noFilterProjects')) + '</li>'}</ul>
+              <div class="history-chatgpt-section${projectsCollapsed ? ' history-section-collapsed' : ''}" data-section-key="${this.escapeHtml(projectsSectionKey)}">
+                <div class="history-chatgpt-section-header">
+                  <h5 class="history-chatgpt-section-title">${this.escapeHtml(projectsTitle)}</h5>
+                  <button type="button" class="history-section-toggle" title="${this.escapeHtml(projectsToggleTitle)}" aria-label="${this.escapeHtml(projectsToggleTitle)}">${this.getIcon('chevronDown')}</button>
+                </div>
+                <div class="history-chatgpt-section-body">
+                  <ul class="project-list">${hasProjects ? projectsSectionItems.join('') : '<li class="project-conv-empty">' + this.escapeHtml(this._t('empty.noFilterProjects')) + '</li>'}</ul>
+                </div>
               </div>
               <div class="history-chatgpt-section">
                 <h5 class="history-chatgpt-section-title">${this.escapeHtml(yourChatsTitle)}</h5>
@@ -2388,6 +2413,21 @@ async applySavedWidth() {
    */
   bindHistoryPlatformEvents(container) {
     if (!container) return;
+    container.querySelectorAll('.history-chatgpt-section').forEach((section) => {
+      const toggleBtn = section.querySelector('.history-section-toggle');
+      const key = section.getAttribute('data-section-key');
+      if (!toggleBtn || !key) return;
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const nextCollapsed = !section.classList.contains('history-section-collapsed');
+        section.classList.toggle('history-section-collapsed', nextCollapsed);
+        this.updateHistorySectionCollapsed(key, nextCollapsed);
+        const label = nextCollapsed ? this._t('toc.expand') : this._t('toc.collapse');
+        toggleBtn.setAttribute('title', label);
+        toggleBtn.setAttribute('aria-label', label);
+      });
+    });
     container.querySelectorAll('.project-item').forEach((item) => {
       const header = item.querySelector('.project-item-header');
       const key = item.getAttribute('data-project-key');
@@ -2474,6 +2514,12 @@ async applySavedWidth() {
     if (!key) return;
     if (expanded) this.historyExpandedProjects.add(key);
     else this.historyExpandedProjects.delete(key);
+  }
+
+  updateHistorySectionCollapsed(key, collapsed) {
+    if (!key) return;
+    if (collapsed) this.historySectionCollapsed.add(key);
+    else this.historySectionCollapsed.delete(key);
   }
 
   async renderConversationDetailInToc(conversationId) {
@@ -2675,10 +2721,6 @@ async applySavedWidth() {
       });
     });
 
-    if (kw) {
-      const firstMark = messagesEl.querySelector('.search-keyword-highlight');
-      if (firstMark) firstMark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
   }
 
   /**
@@ -2741,6 +2783,14 @@ async applySavedWidth() {
     for (let i = 0; i < rawBlocks.length; i++) {
       const block = rawBlocks[i];
       const lines = block.split(/\n/).map((l) => l.trim()).filter(Boolean);
+
+      // 代码块：```...```（HtmlToMarkdown 输出格式）
+      const codeBlockMatch = block.match(/^```(?:\w+)?\s*\n?([\s\S]*?)```\s*$/);
+      if (codeBlockMatch) {
+        const codeContent = (codeBlockMatch[1] || '').trim();
+        out.push('<pre class="toc-expanded-pre"><code class="toc-expanded-code">' + this.escapeHtml(codeContent) + '</code></pre>');
+        continue;
+      }
 
       // 标题：## 或 ### 开头
       const h2Match = block.match(/^##\s+(.+)$/s);
@@ -2855,7 +2905,7 @@ async applySavedWidth() {
    */
   async renderProjectConversationMessages(conversationId, containerElement, searchKeyword, options = {}) {
     if (!containerElement) return;
-    const { preserveScroll = true, scrollToMatch = false } = options || {};
+    const { preserveScroll = true } = options || {};
     const prevScrollEl = containerElement.querySelector('.conv-detail-toc-list');
     const prevScrollTop = preserveScroll && prevScrollEl ? prevScrollEl.scrollTop : 0;
     try {
@@ -2962,9 +3012,7 @@ async applySavedWidth() {
           });
         });
       });
-      if (scrollToMatch && kw && containerElement.querySelector('.search-keyword-highlight')) {
-        containerElement.querySelector('.search-keyword-highlight').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } else if (preserveScroll) {
+      if (preserveScroll) {
         const nextScrollEl = containerElement.querySelector('.conv-detail-toc-list');
         if (nextScrollEl) {
           const maxTop = Math.max(0, nextScrollEl.scrollHeight - nextScrollEl.clientHeight);
@@ -3021,7 +3069,7 @@ async applySavedWidth() {
    */
   handleProjectDetailSearch(keyword) {
     if (!this.projectsDetailMessagesEl || !this.projectsDetailMessages || !this.projectsDetailConvId) return;
-    this.renderProjectConversationMessages(this.projectsDetailConvId, this.projectsDetailMessagesEl, keyword, { scrollToMatch: true });
+    this.renderProjectConversationMessages(this.projectsDetailConvId, this.projectsDetailMessagesEl, keyword, { scrollToMatch: false });
   }
 
   /**
@@ -3141,11 +3189,6 @@ async applySavedWidth() {
     searchResults.style.display = 'none';
     tocContent.style.display = 'block';
     this.renderTOC(kw || undefined);
-    if (kw) {
-      const tocList = this.shadowRoot.getElementById('toc-list');
-      const firstMark = tocList && tocList.querySelector('.search-keyword-highlight');
-      if (firstMark) firstMark.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
     this.log('TOC search:', kw ? 'highlight + expand all' : 'clear');
   }
 

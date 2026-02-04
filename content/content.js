@@ -8,7 +8,8 @@
 const SUPPORTED_HOSTNAMES = [
   'chatgpt.com',
   'chat.openai.com',
-  'gemini.google.com'
+  'gemini.google.com',
+  'claude.ai'
 ];
 
 class SidebarExtension {
@@ -23,6 +24,20 @@ class SidebarExtension {
       const platform = window.platformAdapter ? window.platformAdapter.getPlatformName() : 'Sidebar';
       console.log(`[${platform} Sidebar Extension]`, ...args);
     }
+  }
+
+  getReadyContainer() {
+    if (window.platformAdapter && typeof window.platformAdapter.getMainContainer === 'function') {
+      const container = window.platformAdapter.getMainContainer();
+      if (container) return container;
+    }
+    const main = document.querySelector('main') || document.querySelector('[role="main"]');
+    if (main) return main;
+    if (window.location.hostname.includes('claude.ai')) {
+      const claudeContainer = document.querySelector('[data-test-render-count]');
+      if (claudeContainer) return claudeContainer;
+    }
+    return document.body || null;
   }
 
   /**
@@ -72,7 +87,7 @@ class SidebarExtension {
       return window.platformAdapter.isConversationPage();
     }
     // 备用检查（适配器未加载时）
-    return window.location.href.includes('/c/') || window.location.href.includes('/app/');
+    return window.location.href.includes('/c/') || window.location.href.includes('/app/') || window.location.href.includes('/chat/');
   }
 
   /**
@@ -98,7 +113,7 @@ class SidebarExtension {
     // 等待主要内容区域加载
     await new Promise((resolve) => {
       const checkContent = setInterval(() => {
-        const mainContent = document.querySelector('main');
+        const mainContent = this.getReadyContainer();
         if (mainContent) {
           clearInterval(checkContent);
           this.log('Main content ready');

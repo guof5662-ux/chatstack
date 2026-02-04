@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChatStack",
   "version": "1.1.0",
-  "description": "为 ChatGPT、Gemini 添加智能侧边栏：TOC、双层 Projects、收藏",
+  "description": "为 ChatGPT、Gemini、Claude 添加智能侧边栏：TOC、双层 Projects、收藏",
   "permissions": [
     "storage"
   ],
@@ -19,7 +19,8 @@
   "host_permissions": [
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "https://claude.ai/*"
   ],
   "icons": {
     "16": "icons/float-icon.png",
@@ -71,6 +72,28 @@
       ],
       "css": [],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "lib/jszip.min.js",
+        "core/storage.js",
+        "core/i18n.js",
+        "core/toc-manager.js",
+        "core/project-manager.js",
+        "content/platform-adapter.js",
+        "content/claude-adapter.js",
+        "content/html-to-markdown.js",
+        "content/sidebar-export.js",
+        "content/sidebar-toc.js",
+        "content/sidebar-filters.js",
+        "content/sidebar.js",
+        "content/content.js"
+      ],
+      "css": [],
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
@@ -79,7 +102,8 @@
       "matches": [
         "https://chat.openai.com/*",
         "https://chatgpt.com/*",
-        "https://gemini.google.com/*"
+        "https://gemini.google.com/*",
+        "https://claude.ai/*"
       ]
     }
   ]
