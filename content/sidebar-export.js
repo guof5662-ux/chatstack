@@ -23,7 +23,6 @@
           <label class="export-format"><input type="checkbox" data-format="json"> JSON</label>
           <label class="export-format"><input type="checkbox" data-format="md"> MD</label>
           <label class="export-format"><input type="checkbox" data-format="txt"> TXT</label>
-          <label class="export-format export-zip"><input type="checkbox" data-zip> ${this._t('export.zip')}</label>
           <span class="export-count" id="${countId}">${this._t('export.selected', { n: '0' })}</span>
         </div>
         <div class="export-actions">
@@ -81,9 +80,6 @@
       if (bar) bar.style.display = 'flex';
       this.syncExportFormatsToUI();
       this.updateExportHint();
-      if (scope === 'toc') {
-        this.selectAllInScope(scope);
-      }
       this.updateExportCount();
     }
 
@@ -110,8 +106,6 @@
         const fmt = input.getAttribute('data-format');
         input.checked = !!this.exportState.formats[fmt];
       });
-      const zipInput = bar.querySelector('input[data-zip]');
-      if (zipInput) zipInput.checked = !!this.exportState.zip;
     }
 
     updateExportHint() {
@@ -254,7 +248,7 @@
         return;
       }
 
-      const shouldZip = this.exportState.zip || files.length > 1;
+      const shouldZip = files.length > 1;
       if (shouldZip) {
         if (typeof window.JSZip === 'undefined') {
           this.sidebar.showToast(this._t('export.zipUnavailable'));
@@ -266,7 +260,6 @@
         const zipName = `chatstack_export_${this.formatDateForFileName(Date.now())}.zip`;
         this.downloadBlob(blob, zipName);
         this.sidebar.showToast(this._t('export.done'));
-        this.selectAllInScope(this.exportState.scope);
         this.resetExportDownloadButton();
         return;
       }
@@ -276,7 +269,6 @@
         this.downloadBlob(blob, f.name);
       }
       this.sidebar.showToast(this._t('export.done'));
-      this.selectAllInScope(this.exportState.scope);
       this.resetExportDownloadButton();
     }
 

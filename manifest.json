@@ -125,7 +125,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["content/sidebar.css", "icons/float-icon.png"],
+      "resources": ["content/sidebar.css", "icons/float-icon.png", "icons/deepseek.png"],
       "matches": [
         "https://chat.openai.com/*",
         "https://chatgpt.com/*",

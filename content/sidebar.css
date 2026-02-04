@@ -1791,7 +1791,7 @@
   font-size: 13px;
   transition: transform 0.28s cubic-bezier(0.33, 1, 0.68, 1);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   gap: 8px;
 }
@@ -1844,16 +1844,19 @@
 }
 
 .toc-item-main {
-  flex: 0 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
-  max-width: calc(100% - 110px);
   display: flex;
   align-items: start;
+  flex-wrap: wrap;
   gap: 8px;
   cursor: pointer;
 }
 
 .toc-item-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   flex-shrink: 0;
   margin-left: auto;
   display: flex;
@@ -1986,8 +1989,9 @@
 }
 
 .toc-content-wrapper {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 /* 单一内容块：展开前用 max-height + 渐变遮挡，展开后同一块完整显示，无重复 */
@@ -3586,6 +3590,19 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.settings-clear-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.settings-clear-row .settings-select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
 }
 
 .btn-danger {

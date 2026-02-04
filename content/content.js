@@ -178,6 +178,40 @@ class SidebarExtension {
 
         if (!sidebar) return;
 
+        // 同步 config（语言/风格/自动保存）变化到本 tab
+        if (changes.config) {
+          const newConfig = changes.config.newValue || {};
+          const oldConfig = changes.config.oldValue || {};
+
+          if (newConfig.theme !== oldConfig.theme) {
+            sidebar.applyTheme(newConfig.theme || 'auto');
+            const themeSelect = sidebar.shadowRoot?.getElementById('select-theme');
+            if (themeSelect) themeSelect.value = newConfig.theme || 'auto';
+          }
+
+          if (newConfig.language !== oldConfig.language && window.i18nManager) {
+            const lang = newConfig.language || 'auto';
+            const resolvedLang = (lang === 'auto') ? (sidebar.getSystemLanguageCode?.() || 'zh') : lang;
+            window.i18nManager.setLanguage(resolvedLang);
+            window.i18nManager.updateDOM(sidebar.shadowRoot);
+            const langSelect = sidebar.shadowRoot?.getElementById('select-language');
+            if (langSelect) langSelect.value = lang;
+            if (sidebar.updateFilterPlatformTriggerText) sidebar.updateFilterPlatformTriggerText();
+            if (sidebar.currentTab === 'toc') {
+              sidebar.renderTOC();
+              if (sidebar.viewingConversationId) sidebar.renderConversationDetailInToc(sidebar.viewingConversationId);
+              else sidebar.renderConversationsList();
+            } else if (sidebar.currentTab === 'projects') {
+              sidebar.renderProjects();
+            }
+          }
+
+          if (newConfig.autoSave !== oldConfig.autoSave) {
+            const autoSaveToggle = sidebar.shadowRoot?.getElementById('toggle-auto-save');
+            if (autoSaveToggle) autoSaveToggle.checked = newConfig.autoSave !== false;
+          }
+        }
+
         const isProjectsTab = sidebar.currentTab === 'projects';
         const isHistoryTab = sidebar.currentTab === 'conversations';
         const isHistoryDetail = isHistoryTab && !!sidebar.viewingConversationId;
