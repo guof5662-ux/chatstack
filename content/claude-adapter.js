@@ -10,16 +10,22 @@ class ClaudeAdapter extends BasePlatformAdapter {
     this.debounceDelay = 500;
     this.keepMessagesOnEmpty = true;
     this.maxEmptyParseStreak = 2;
+    this.siteConfig = typeof getSiteConfig === 'function' ? getSiteConfig(window.location.hostname) : null;
+  }
+
+  _sel(key, fallback) {
+    const s = this.siteConfig?.selectors?.[key];
+    return (typeof s === 'string' ? s : null) || fallback;
   }
 
   // ===== 实现抽象方法 =====
 
   getPlatformName() {
-    return 'Claude';
+    return this.siteConfig?.platformName || 'Claude';
   }
 
   getPlatformIcon() {
-    return 'https://claude.ai/favicon.ico';
+    return this.siteConfig?.platformIcon || 'https://claude.ai/favicon.ico';
   }
 
   /**
@@ -66,9 +72,10 @@ class ClaudeAdapter extends BasePlatformAdapter {
         return messages;
       }
 
-      const messageContainers = document.querySelectorAll('[data-test-render-count]');
+      const containerSel = this._sel('container', '[data-test-render-count]');
+      const messageContainers = document.querySelectorAll(containerSel);
       if (messageContainers.length === 0) {
-        this.log('No [data-test-render-count] containers found');
+        this.log('No message containers found, selector:', containerSel);
         return messages;
       }
 
@@ -78,9 +85,11 @@ class ClaudeAdapter extends BasePlatformAdapter {
         return messages;
       }
 
+      const userSel = this._sel('userItem', '[data-testid="user-message"]');
+      const assistantSel = this._sel('assistantItem', '.font-claude-response');
       const allElements = [];
       messageContainers.forEach((container) => {
-        const userMessage = container.querySelector('[data-testid="user-message"]');
+        const userMessage = container.querySelector(userSel);
         if (userMessage) {
           let content = this.getContentWithStructure(userMessage, 'user');
           if (!content) content = this.extractFormattedContent(userMessage);
@@ -90,7 +99,7 @@ class ClaudeAdapter extends BasePlatformAdapter {
           return;
         }
 
-        const aiMessage = container.querySelector('.font-claude-response');
+        const aiMessage = container.querySelector(assistantSel);
         if (aiMessage) {
           let content = this.getContentWithStructure(aiMessage, 'assistant');
           if (!content) content = this.extractOnlyFormalResponse(aiMessage);

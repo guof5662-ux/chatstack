@@ -9,7 +9,8 @@ const SUPPORTED_HOSTNAMES = [
   'chatgpt.com',
   'chat.openai.com',
   'gemini.google.com',
-  'claude.ai'
+  'claude.ai',
+  'chat.deepseek.com'
 ];
 
 class SidebarExtension {
@@ -37,14 +38,31 @@ class SidebarExtension {
       const claudeContainer = document.querySelector('[data-test-render-count]');
       if (claudeContainer) return claudeContainer;
     }
+    if (window.location.hostname.includes('chat.deepseek.com')) {
+      const deepseekContainer = document.querySelector('.dad65929');
+      if (deepseekContainer) return deepseekContainer;
+    }
     return document.body || null;
   }
 
   /**
    * 初始化扩展
+   * ChatTOC 风格：运行时平台检查，未支持则直接 return
    */
   async init() {
     if (this.initialized) return;
+
+    const hostname = window.location.hostname || '';
+    const isSupportedHost = SUPPORTED_HOSTNAMES.some((h) => hostname.includes(h) || h.includes(hostname));
+    if (!isSupportedHost) {
+      this.log('Hostname not in supported list, skip init');
+      return;
+    }
+
+    if (!window.platformAdapter || typeof window.platformAdapter.isConversationPage !== 'function') {
+      this.log('No platform adapter available, skip init');
+      return;
+    }
 
     this.log('Initializing extension...');
 
@@ -56,20 +74,20 @@ class SidebarExtension {
       await this.initManagers();
       this.initStorageSync();
 
-      // 注入侧边栏
+      // 注入侧边栏（再次确认 platformAdapter 存在）
+      if (!window.platformAdapter) {
+        this.log('Platform adapter lost before inject, skip');
+        return;
+      }
       window.sidebarUI.inject();
 
       // 初始化平台适配器
-      if (window.platformAdapter) {
-        window.platformAdapter.init();
+      window.platformAdapter.init();
 
-        // 开始监听页面变化
-        window.platformAdapter.startObserving((messages) => {
-          this.handleMessagesUpdate(messages);
-        });
-      } else {
-        console.warn('[Sidebar Extension] No platform adapter available');
-      }
+      // 开始监听页面变化
+      window.platformAdapter.startObserving((messages) => {
+        this.handleMessagesUpdate(messages);
+      });
 
       this.initialized = true;
       this.log('Extension initialized successfully ✓');

@@ -9,17 +9,23 @@ class GeminiAdapter extends BasePlatformAdapter {
     this.debounceDelay = 600;
     this.keepMessagesOnEmpty = true;
     this.maxEmptyParseStreak = 0;
-    this.minMessageContentLength = 1; // 允许短消息如「你好」被识别
+    this.minMessageContentLength = 1;
+    this.siteConfig = typeof getSiteConfig === 'function' ? getSiteConfig(window.location.hostname) : null;
+  }
+
+  _sel(key, fallback) {
+    const s = this.siteConfig?.selectors?.[key];
+    return (typeof s === 'string' ? s : null) || fallback;
   }
 
   // ===== 抽象方法实现 =====
 
   getPlatformName() {
-    return 'Gemini';
+    return this.siteConfig?.platformName || 'Gemini';
   }
 
   getPlatformIcon() {
-    return 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg';
+    return this.siteConfig?.platformIcon || 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg';
   }
 
   /**
@@ -148,16 +154,18 @@ class GeminiAdapter extends BasePlatformAdapter {
       }
 
       const root = document.body;
-      const chatHistoryContainer = document.querySelector('#chat-history') ||
-        this.querySelectorIncludingShadow(root, '#chat-history');
+      const containerSel = this._sel('container', '#chat-history');
+      const chatHistoryContainer = document.querySelector(containerSel) ||
+        this.querySelectorIncludingShadow(root, containerSel);
       if (!chatHistoryContainer) {
-        this.log('Container #chat-history not found');
+        this.log('Container not found:', containerSel);
         return messages;
       }
 
-      let conversationBlocks = chatHistoryContainer.querySelectorAll('.conversation-container');
+      const blockSel = this._sel('conversationBlock', '.conversation-container');
+      let conversationBlocks = chatHistoryContainer.querySelectorAll(blockSel);
       if (conversationBlocks.length === 0) {
-        conversationBlocks = this.querySelectorAllIncludingShadow(root, '.conversation-container');
+        conversationBlocks = this.querySelectorAllIncludingShadow(root, blockSel);
       }
       if (conversationBlocks.length === 0) {
         this.log('No .conversation-container found');
@@ -170,9 +178,12 @@ class GeminiAdapter extends BasePlatformAdapter {
         return messages;
       }
 
+      const userQuerySel = this._sel('userQuery', 'user-query .query-text');
+      const modelResponseSel = this._sel('modelResponse', 'model-response');
+      const modelResponseTextSel = this._sel('modelResponseText', '.model-response-text');
       let index = 0;
       conversationBlocks.forEach((block) => {
-        const userQueryContainer = block.querySelector('user-query .query-text');
+        const userQueryContainer = block.querySelector(userQuerySel);
         if (userQueryContainer) {
           let content = this.getContentWithStructure(userQueryContainer);
           if (!content) content = this.cleanText(this.extractFormattedContent(userQueryContainer));
@@ -185,9 +196,9 @@ class GeminiAdapter extends BasePlatformAdapter {
           }
         }
 
-        const modelResponseEntity = block.querySelector('model-response');
+        const modelResponseEntity = block.querySelector(modelResponseSel);
         if (modelResponseEntity) {
-          const messageContentContainer = modelResponseEntity.querySelector('.model-response-text');
+          const messageContentContainer = modelResponseEntity.querySelector(modelResponseTextSel);
           const textEl = messageContentContainer || modelResponseEntity;
           let content = this.getContentWithStructure(textEl);
           if (!content) content = this.cleanText(this.extractFormattedContent(textEl));

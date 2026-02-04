@@ -20,7 +20,7 @@ class SidebarUI {
     this.currentMsgSearchElement = null;
     this.msgSearchFloatRoot = null;
     this.floatButton = null;
-    this.sidebarWidth = 320;
+    this.sidebarWidth = 280;
     this._resizeStartX = 0;
     this._resizeStartWidth = 0;
     this.currentTocView = 'toc'; // 'toc' | 'conversations'
@@ -127,6 +127,10 @@ class SidebarUI {
       const pathId = id.replace(/_/g, '/');
       return `https://claude.ai/chat/${pathId}`;
     }
+    if (name === 'DeepSeek') {
+      const pathId = id.replace(/_/g, '/');
+      return `https://chat.deepseek.com/${pathId}`;
+    }
     if (name === 'ChatGPT') {
       return `https://chatgpt.com/c/${id}`;
     }
@@ -158,6 +162,7 @@ class SidebarUI {
       ChatGPT: 'https://chatgpt.com/favicon.ico',
       Gemini: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
       Claude: 'https://claude.ai/favicon.ico',
+      DeepSeek: 'https://deepseek.com/favicon.ico',
     };
     return urls[name] || urls.ChatGPT;
   }
@@ -366,6 +371,7 @@ class SidebarUI {
                     <label class="filter-platform-option"><input type="checkbox" value="ChatGPT" /> ChatGPT</label>
                     <label class="filter-platform-option"><input type="checkbox" value="Claude" /> Claude</label>
                     <label class="filter-platform-option"><input type="checkbox" value="Gemini" /> Gemini</label>
+                    <label class="filter-platform-option"><input type="checkbox" value="DeepSeek" /> DeepSeek</label>
                   </div>
                 </div>
                 <div class="filter-panel-actions">
@@ -445,6 +451,7 @@ class SidebarUI {
                   <label class="filter-platform-option"><input type="checkbox" value="ChatGPT" /> ChatGPT</label>
                   <label class="filter-platform-option"><input type="checkbox" value="Claude" /> Claude</label>
                   <label class="filter-platform-option"><input type="checkbox" value="Gemini" /> Gemini</label>
+                  <label class="filter-platform-option"><input type="checkbox" value="DeepSeek" /> DeepSeek</label>
                 </div>
               </div>
               <div class="filter-panel-actions">
@@ -539,14 +546,59 @@ class SidebarUI {
 
   getLayoutRoots() {
     if (typeof document === 'undefined' || !document.body) return [];
-    const seen = new Set();
-    const roots = [];
-    const add = (el) => { if (el && !seen.has(el)) { seen.add(el); roots.push(el); } };
+    const candidates = [];
+    const add = (el) => { if (el && !candidates.includes(el)) candidates.push(el); };
+    if (window.platformAdapter && typeof window.platformAdapter.getMainContainer === 'function') {
+      add(window.platformAdapter.getMainContainer());
+    }
     add(document.querySelector('main'));
     add(document.getElementById('__next'));
     add(document.getElementById('root'));
     add(document.body);
-    return roots;
+    // 只保留最内层元素，避免对嵌套祖先重复施加 padding-right
+    return candidates.filter(el => !candidates.some(other => other !== el && el.contains(other)));
+  }
+
+  getDeepSeekInputContainer() {
+    if (!window.location || !window.location.hostname.includes('chat.deepseek.com')) return null;
+    const input = document.querySelector('textarea[placeholder*="DeepSeek"]') ||
+      document.querySelector('textarea[placeholder*="发送消息"]') ||
+      document.querySelector('textarea');
+    if (!input) return null;
+    let cur = input;
+    for (let i = 0; i < 8 && cur; i += 1) {
+      const style = window.getComputedStyle(cur);
+      if (style && (style.position === 'fixed' || style.position === 'sticky')) return cur;
+      cur = cur.parentElement;
+    }
+    return input.closest('form') || input.closest('[role="form"]') || input.closest('footer') || input.parentElement;
+  }
+
+  applyDeepSeekInputOffset(width) {
+    const container = this.getDeepSeekInputContainer();
+    if (!container) return;
+    const w = String(width != null ? width : this.sidebarWidth);
+    if (!container.dataset.chatgptSidebarOffset) {
+      container.dataset.chatgptSidebarOffset = '1';
+      container.dataset.chatgptSidebarPrevRight = container.style.right || '';
+      container.dataset.chatgptSidebarPrevWidth = container.style.width || '';
+      container.dataset.chatgptSidebarPrevMaxWidth = container.style.maxWidth || '';
+    }
+    container.style.right = `var(--chatgpt-sidebar-width)`;
+    container.style.width = `calc(100% - ${w}px)`;
+    container.style.maxWidth = `calc(100% - ${w}px)`;
+  }
+
+  clearDeepSeekInputOffset() {
+    const container = this.getDeepSeekInputContainer();
+    if (!container || !container.dataset.chatgptSidebarOffset) return;
+    container.style.right = container.dataset.chatgptSidebarPrevRight || '';
+    container.style.width = container.dataset.chatgptSidebarPrevWidth || '';
+    container.style.maxWidth = container.dataset.chatgptSidebarPrevMaxWidth || '';
+    delete container.dataset.chatgptSidebarOffset;
+    delete container.dataset.chatgptSidebarPrevRight;
+    delete container.dataset.chatgptSidebarPrevWidth;
+    delete container.dataset.chatgptSidebarPrevMaxWidth;
   }
 
   applyPageMarginForDocked(width) {
@@ -555,11 +607,13 @@ class SidebarUI {
     document.documentElement.classList.add('chatgpt-sidebar-docked');
     document.documentElement.style.setProperty('--chatgpt-sidebar-width', w + 'px');
     const roots = this.getLayoutRoots();
-    const transition = document.documentElement.classList.contains('chatgpt-sidebar-resizing') ? 'none' : 'margin-right 0.18s ease-out';
+    const transition = document.documentElement.classList.contains('chatgpt-sidebar-resizing') ? 'none' : 'padding-right 0.18s ease-out';
     roots.forEach((root) => {
-      root.style.setProperty('margin-right', w + 'px');
+      root.style.setProperty('padding-right', w + 'px');
+      root.style.setProperty('box-sizing', 'border-box');
       root.style.setProperty('transition', transition);
     });
+    this.applyDeepSeekInputOffset(w);
   }
 
   clearPageMarginForDocked() {
@@ -567,9 +621,11 @@ class SidebarUI {
     document.documentElement.classList.remove('chatgpt-sidebar-docked', 'chatgpt-sidebar-resizing');
     document.documentElement.style.removeProperty('--chatgpt-sidebar-width');
     this.getLayoutRoots().forEach((root) => {
-      root.style.removeProperty('margin-right');
+      root.style.removeProperty('padding-right');
+      root.style.removeProperty('box-sizing');
       root.style.removeProperty('transition');
     });
+    this.clearDeepSeekInputOffset();
   }
 
   startResizing() {
@@ -583,7 +639,7 @@ class SidebarUI {
     if (typeof document === 'undefined') return;
     document.documentElement.classList.remove('chatgpt-sidebar-resizing');
     if (this.container) this.container.classList.remove('sidebar-resizing');
-    this.getLayoutRoots().forEach((root) => root.style.setProperty('transition', 'margin-right 0.18s ease-out'));
+    this.getLayoutRoots().forEach((root) => root.style.setProperty('transition', 'padding-right 0.18s ease-out'));
   }
 
   applySidebarWidth(width) {
@@ -601,11 +657,11 @@ async applySavedWidth() {
     try {
       if (!window.storageManager || typeof window.storageManager.getConfig !== 'function') return;
       const config = await window.storageManager.getConfig();
-      const w = config && config.sidebarWidth != null ? config.sidebarWidth : 320;
-      this.sidebarWidth = Math.min(560, Math.max(240, Number(w) || 320));
+      const w = config && config.sidebarWidth != null ? config.sidebarWidth : 280;
+      this.sidebarWidth = Math.min(560, Math.max(240, Number(w) || 280));
       this.applySidebarWidth(this.sidebarWidth);
     } catch (e) {
-      this.applySidebarWidth(320);
+      this.applySidebarWidth(280);
     }
   }
 
@@ -2316,7 +2372,7 @@ async applySavedWidth() {
         </li>`;
       };
 
-      const platformOrder = ['ChatGPT', 'Gemini', 'Claude'];
+      const platformOrder = ['ChatGPT', 'Gemini', 'Claude', 'DeepSeek'];
       const platformBlocks = [];
       for (const platform of platformOrder) {
         const plist = byPlatform[platform];
