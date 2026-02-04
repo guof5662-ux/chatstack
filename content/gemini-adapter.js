@@ -29,6 +29,9 @@ class GeminiAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+      return chrome.runtime.getURL('icons/gemini.svg');
+    }
     return this.siteConfig?.platformIcon || 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg';
   }
 

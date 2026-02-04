@@ -232,18 +232,24 @@ class SidebarUI {
     return platform1.toLowerCase() === platform2.toLowerCase();
   }
 
-  /** 根据平台名称返回平台 logo URL（用于历史/项目卡片） */
+  /** 根据平台名称返回平台 logo URL（用于历史/项目卡片），优先使用扩展内本地图标 */
   getPlatformIconUrl(platformName) {
     const name = (platformName || '').trim() || 'ChatGPT';
+    if (this.isExtensionContextValid() && chrome.runtime.getURL) {
+      const local = {
+        ChatGPT: 'icons/chatgpt.png',
+        Gemini: 'icons/gemini.svg',
+        Claude: 'icons/claude.ico',
+        DeepSeek: 'icons/deepseek.png',
+      };
+      if (local[name]) return chrome.runtime.getURL(local[name]);
+    }
     const urls = {
       ChatGPT: 'https://chatgpt.com/favicon.ico',
       Gemini: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
       Claude: 'https://claude.ai/favicon.ico',
       DeepSeek: 'https://cdn.deepseek.com/logo.png',
     };
-    if (name === 'DeepSeek' && this.isExtensionContextValid() && chrome.runtime.getURL) {
-      return chrome.runtime.getURL('icons/deepseek.png');
-    }
     return urls[name] || urls.ChatGPT;
   }
 

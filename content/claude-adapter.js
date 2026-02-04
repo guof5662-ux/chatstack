@@ -29,6 +29,9 @@ class ClaudeAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+      return chrome.runtime.getURL('icons/claude.ico');
+    }
     return this.siteConfig?.platformIcon || 'https://claude.ai/favicon.ico';
   }
 
