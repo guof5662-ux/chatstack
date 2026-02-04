@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ChatStack",
   "version": "1.1.0",
-  "description": "为 ChatGPT、Gemini、Claude、DeepSeek 添加智能侧边栏：TOC、双层 Projects、收藏",
+  "description": "Smart TOC, cross-platform conversation & project grouping; keyword search & pinpoint jump, favorites & export. ChatGPT, Gemini, Claude, DeepSeek.",
   "permissions": [
     "storage"
   ],
