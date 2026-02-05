@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "ChatStack",
+  "name": "__MSG_extName__",
   "version": "1.1.0",
-  "description": "Smart TOC, cross-platform conversation & project grouping; keyword search & pinpoint jump, favorites & export. ChatGPT, Gemini, Claude, DeepSeek.",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "permissions": [
     "storage"
   ],

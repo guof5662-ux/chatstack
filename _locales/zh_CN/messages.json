@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "ChatStack",
+    "description": "扩展名称，显示在浏览器与商店中。"
+  },
+  "extDescription": {
+    "message": "智能目录、多平台对话与项目分组；关键词搜索与精准定位，收藏与导出。支持 ChatGPT、Gemini、Claude、DeepSeek。",
+    "description": "商店与扩展管理页的简短描述（最多 132 字符）。"
+  }
+}
