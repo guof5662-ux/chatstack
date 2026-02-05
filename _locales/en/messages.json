@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "ChatStack",
+    "description": "Extension name shown in the browser and store."
+  },
+  "extDescription": {
+    "message": "Smart TOC, cross-platform conversation & project grouping; search & jump, favorites & export. ChatGPT, Gemini, Claude, DeepSeek.",
+    "description": "Short description for the store and chrome://extensions (max 132 characters)."
+  }
+}
