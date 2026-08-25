@@ -6,11 +6,12 @@
 
 class ProjectManager {
   constructor() {
-    this.DEBUG = true;
+    this.DEBUG = false;
     this.projects = {
       auto: {}, // { 'Platform:slug': { name, conversations: [], platform } }
       my: {} // { projectId: { name, conversations: [], createdAt } }
     };
+    this._mapQueue = Promise.resolve();
   }
 
   log(...args) {
@@ -35,6 +36,43 @@ class ProjectManager {
     this.log('Projects saved');
   }
 
+  cloneProjects(projects) {
+    const src = projects || {};
+    const auto = {};
+    const my = {};
+
+    Object.entries(src.auto || {}).forEach(([key, project]) => {
+      auto[key] = {
+        ...project,
+        conversations: Array.isArray(project?.conversations)
+          ? Array.from(new Set(project.conversations))
+          : []
+      };
+    });
+
+    Object.entries(src.my || {}).forEach(([key, project]) => {
+      my[key] = {
+        ...project,
+        conversations: Array.isArray(project?.conversations)
+          ? Array.from(new Set(project.conversations))
+          : []
+      };
+    });
+
+    return { auto, my };
+  }
+
+  isConversationMapped(projects, key, conversationId) {
+    const convs = projects?.auto?.[key]?.conversations;
+    return Array.isArray(convs) && convs.includes(conversationId);
+  }
+
+  enqueueMapTask(task) {
+    const run = this._mapQueue.then(task, task);
+    this._mapQueue = run.catch(() => {});
+    return run;
+  }
+
   /**
    * 映射会话到自动项目（多平台支持）
    * @param {string} conversationId
@@ -43,36 +81,53 @@ class ProjectManager {
    * @param {string|null} projectName - 显示名
    */
   async mapToAutoProject(conversationId, platform, projectSlug, projectName) {
-    const slug = (projectSlug && String(projectSlug).trim()) || null;
-    const name = (projectName && String(projectName).trim()) || null;
-    const key = slug ? `${platform}:${slug}` : `${platform}:Inbox`;
+    return this.enqueueMapTask(async () => {
+      const slug = (projectSlug && String(projectSlug).trim()) || null;
+      const name = (projectName && String(projectName).trim()) || null;
+      const key = slug ? `${platform}:${slug}` : `${platform}:Inbox`;
+      const maxAttempts = 3;
 
-    // 从所有自动项目中移除该会话
-    Object.values(this.projects.auto).forEach(project => {
-      project.conversations = (project.conversations || []).filter(id => id !== conversationId);
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const latest = await window.storageManager.getAllProjects();
+        this.projects = this.cloneProjects(latest);
+
+        // 从所有自动项目中移除该会话
+        Object.values(this.projects.auto).forEach(project => {
+          project.conversations = (project.conversations || []).filter(id => id !== conversationId);
+        });
+
+        // 确保目标项目存在
+        if (!this.projects.auto[key]) {
+          this.projects.auto[key] = {
+            name: name || (slug || 'Inbox (Auto)'),
+            conversations: [],
+            platform: platform
+          };
+        }
+
+        const project = this.projects.auto[key];
+        if (name) project.name = name;
+        if (!project.platform) project.platform = platform;
+
+        if (!project.conversations.includes(conversationId)) {
+          project.conversations.push(conversationId);
+        }
+
+        this.cleanupEmptyAutoProjects();
+        await this.save();
+
+        const confirmed = await window.storageManager.getAllProjects();
+        if (this.isConversationMapped(confirmed, key, conversationId)) {
+          this.projects = this.cloneProjects(confirmed);
+          this.log(`Mapped conversation ${conversationId} to ${platform} project: ${key}`);
+          return;
+        }
+
+        this.log(`mapToAutoProject retry ${attempt}/${maxAttempts} for ${conversationId}`);
+      }
+
+      this.log(`mapToAutoProject failed to confirm mapping for ${conversationId}`);
     });
-
-    // 确保项目存在
-    if (!this.projects.auto[key]) {
-      this.projects.auto[key] = {
-        name: name || (slug || 'Inbox (Auto)'),
-        conversations: [],
-        platform: platform
-      };
-    }
-
-    const project = this.projects.auto[key];
-    if (name) project.name = name;
-    if (!project.platform) project.platform = platform;
-
-    // 添加会话到项目
-    if (!project.conversations.includes(conversationId)) {
-      project.conversations.push(conversationId);
-    }
-
-    this.cleanupEmptyAutoProjects();
-    await this.save();
-    this.log(`Mapped conversation ${conversationId} to ${platform} project: ${key}`);
   }
 
   /**

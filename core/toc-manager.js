@@ -5,7 +5,7 @@
 
 class TOCManager {
   constructor() {
-    this.DEBUG = true;
+    this.DEBUG = false;
     this.tocItems = []; // { id, title, messageId, element }
     this.messageIdToElement = {}; // 所有消息的 messageId -> element，供搜索跳转用
   }

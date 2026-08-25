@@ -29,13 +29,13 @@ class DeepSeekAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
-    // 优先使用扩展内打包的 DeepSeek 官方 logo，其次配置/CDN
+    // 仅使用扩展内打包图标，不产生额外的第三方图标请求。
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.getURL) {
-        return chrome.runtime.getURL('icons/deepseek.png');
+        return chrome.runtime.getURL(this.siteConfig?.platformIcon || 'icons/deepseek.png');
       }
-    } catch (e) {}
-    return this.siteConfig?.platformIcon || 'https://cdn.deepseek.com/logo.png';
+    } catch {}
+    return '';
   }
 
   /**
@@ -63,7 +63,7 @@ class DeepSeekAdapter extends BasePlatformAdapter {
         return pathname.replace(/\//g, '_');
       }
       return null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -121,33 +121,9 @@ class DeepSeekAdapter extends BasePlatformAdapter {
       messageElements.forEach((element) => {
         const isUserMessage = element.matches(userMsgSel) || element.classList.contains(userMsgSel.replace(/^\./, '').split('.')[0] || '_9663006');
         const role = isUserMessage ? 'user' : 'assistant';
-        let content = '';
-
-        if (isUserMessage) {
-          const userTextElement = element.querySelector(userTextSel);
-          if (userTextElement) {
-            content = this.extractFormattedContent(userTextElement);
-          }
-        } else {
-          const dsMessage = element.querySelector(dsMessageSel);
-          if (dsMessage) {
-            const thinkingContainer = dsMessage.querySelector(thinkingSel);
-            const directMarkdown = Array.from(dsMessage.children).find(
-              (child) => child.classList && child.classList.contains(dsMarkdownSel.replace(/^\./, ''))
-            );
-            if (directMarkdown) {
-              content = this.extractFormattedContent(directMarkdown);
-            }
-            if (!content) {
-              const allMarkdown = dsMessage.querySelectorAll(dsMarkdownSel);
-              for (const el of allMarkdown) {
-                if (thinkingContainer && thinkingContainer.contains(el)) continue;
-                content = this.extractFormattedContent(el);
-                if (content) break;
-              }
-            }
-          }
-        }
+        const content = isUserMessage
+          ? this.extractUserMessageContent(element, userTextSel)
+          : this.extractAssistantMessageContent(element, dsMessageSel, dsMarkdownSel, thinkingSel);
 
         if (content && !this.isNoiseContent(content)) {
           allElements.push({ element, role, content });
@@ -181,6 +157,43 @@ class DeepSeekAdapter extends BasePlatformAdapter {
   }
 
   // ===== 辅助方法 =====
+
+  extractUserMessageContent(element, userTextSel) {
+    const userTextElement = element.querySelector(userTextSel);
+    if (!userTextElement) return '';
+    return this.extractFormattedContent(userTextElement);
+  }
+
+  extractAssistantMessageContent(element, dsMessageSel, dsMarkdownSel, thinkingSel) {
+    const dsMessage = element.querySelector(dsMessageSel);
+    if (!dsMessage) return '';
+
+    const thinkingContainer = dsMessage.querySelector(thinkingSel);
+    const directMarkdown = this.findDirectMarkdown(dsMessage, dsMarkdownSel);
+    if (directMarkdown) {
+      const directContent = this.extractFormattedContent(directMarkdown);
+      if (directContent) return directContent;
+    }
+
+    const allMarkdown = dsMessage.querySelectorAll(dsMarkdownSel);
+    for (const markdown of allMarkdown) {
+      if (thinkingContainer && thinkingContainer.contains(markdown)) continue;
+      const content = this.extractFormattedContent(markdown);
+      if (content) return content;
+    }
+
+    return '';
+  }
+
+  findDirectMarkdown(dsMessage, dsMarkdownSel) {
+    const children = Array.from(dsMessage.children || []);
+    for (const child of children) {
+      if (child.matches && child.matches(dsMarkdownSel)) {
+        return child;
+      }
+    }
+    return null;
+  }
 
   isInEditMode(element) {
     if (!element) return false;

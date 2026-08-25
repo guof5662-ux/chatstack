@@ -162,80 +162,108 @@ class SidebarExtension {
     if (this.storageSyncInitialized) return;
     if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.onChanged) return;
 
-    chrome.storage.onChanged.addListener(async (changes, areaName) => {
-      if (areaName !== 'local') return;
-      if (!changes) return;
-      if (!window.storageManager || !window.projectManager) return;
-      try {
-        const sidebar = window.sidebarUI;
-        const hasProjects = !!changes.projects;
-        const hasConversationList = !!changes.conversationList;
-        const convKeys = Object.keys(changes).filter((k) => k.startsWith('conv_'));
-
-        if (hasProjects) {
-          const projects = await window.storageManager.getAllProjects();
-          window.projectManager.projects = projects;
-        }
-
-        if (!sidebar) return;
-
-        // 同步 config（语言/风格/自动保存）变化到本 tab
-        if (changes.config) {
-          const newConfig = changes.config.newValue || {};
-          const oldConfig = changes.config.oldValue || {};
-
-          if (newConfig.theme !== oldConfig.theme) {
-            sidebar.applyTheme(newConfig.theme || 'auto');
-            const themeSelect = sidebar.shadowRoot?.getElementById('select-theme');
-            if (themeSelect) themeSelect.value = newConfig.theme || 'auto';
-          }
-
-          if (newConfig.language !== oldConfig.language && window.i18nManager) {
-            const lang = newConfig.language || 'auto';
-            const resolvedLang = (lang === 'auto') ? (sidebar.getSystemLanguageCode?.() || 'zh') : lang;
-            window.i18nManager.setLanguage(resolvedLang);
-            window.i18nManager.updateDOM(sidebar.shadowRoot);
-            const langSelect = sidebar.shadowRoot?.getElementById('select-language');
-            if (langSelect) langSelect.value = lang;
-            if (sidebar.updateFilterPlatformTriggerText) sidebar.updateFilterPlatformTriggerText();
-            if (sidebar.currentTab === 'toc') {
-              sidebar.renderTOC();
-              if (sidebar.viewingConversationId) sidebar.renderConversationDetailInToc(sidebar.viewingConversationId);
-              else sidebar.renderConversationsList();
-            } else if (sidebar.currentTab === 'projects') {
-              sidebar.renderProjects();
-            }
-          }
-
-          if (newConfig.autoSave !== oldConfig.autoSave) {
-            const autoSaveToggle = sidebar.shadowRoot?.getElementById('toggle-auto-save');
-            if (autoSaveToggle) autoSaveToggle.checked = newConfig.autoSave !== false;
-          }
-        }
-
-        const isProjectsTab = sidebar.currentTab === 'projects';
-        const isHistoryTab = sidebar.currentTab === 'conversations';
-        const isHistoryDetail = isHistoryTab && !!sidebar.viewingConversationId;
-
-        if (isProjectsTab && (hasProjects || hasConversationList || convKeys.length)) {
-          await sidebar.renderProjects();
-          await sidebar.restoreProjectsViewState();
-          return;
-        }
-
-        if (isHistoryTab && (hasProjects || hasConversationList || convKeys.length)) {
-          if (isHistoryDetail) {
-            await sidebar.renderConversationDetailInToc(sidebar.viewingConversationId);
-          } else {
-            await sidebar.renderConversationsList();
-          }
-        }
-      } catch (e) {
-        console.warn('[Sidebar Extension] Storage sync error:', e);
-      }
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      this.handleStorageChanges(changes, areaName);
     });
 
     this.storageSyncInitialized = true;
+  }
+
+  shouldHandleStorageChanges(changes, areaName) {
+    if (areaName !== 'local') return false;
+    if (!changes) return false;
+    if (!window.storageManager || !window.projectManager) return false;
+    return true;
+  }
+
+  getStorageChangeFlags(changes) {
+    return {
+      hasProjects: !!changes.projects,
+      hasConversationList: !!changes.conversationList,
+      hasConversationUpdates: Object.keys(changes).some((key) => key.startsWith('conv_'))
+    };
+  }
+
+  hasConversationDataChanges(flags) {
+    return flags.hasProjects || flags.hasConversationList || flags.hasConversationUpdates;
+  }
+
+  syncThemeConfig(sidebar, newConfig, oldConfig) {
+    if (newConfig.theme === oldConfig.theme) return;
+    const theme = newConfig.theme || 'auto';
+    sidebar.applyTheme(theme);
+    const themeSelect = sidebar.shadowRoot?.getElementById('select-theme');
+    if (themeSelect) themeSelect.value = theme;
+  }
+
+  syncLanguageConfig(sidebar, newConfig, oldConfig) {
+    if (newConfig.language === oldConfig.language || !window.i18nManager) return;
+    const lang = newConfig.language || 'auto';
+    const resolvedLang = (lang === 'auto') ? (sidebar.getSystemLanguageCode?.() || 'zh') : lang;
+    window.i18nManager.setLanguage(resolvedLang);
+    window.i18nManager.updateDOM(sidebar.shadowRoot);
+    const langSelect = sidebar.shadowRoot?.getElementById('select-language');
+    if (langSelect) langSelect.value = lang;
+    if (sidebar.updateFilterPlatformTriggerText) sidebar.updateFilterPlatformTriggerText();
+    if (sidebar.currentTab === 'toc') {
+      sidebar.renderTOC();
+      if (sidebar.viewingConversationId) sidebar.renderConversationDetailInToc(sidebar.viewingConversationId);
+      else sidebar.renderConversationsList();
+      return;
+    }
+    if (sidebar.currentTab === 'projects') {
+      sidebar.renderProjects();
+    }
+  }
+
+  syncAutoSaveConfig(sidebar, newConfig, oldConfig) {
+    if (newConfig.autoSave === oldConfig.autoSave) return;
+    const autoSaveToggle = sidebar.shadowRoot?.getElementById('toggle-auto-save');
+    if (autoSaveToggle) autoSaveToggle.checked = newConfig.autoSave !== false;
+  }
+
+  syncConfigChanges(sidebar, configChange) {
+    if (!configChange) return;
+    const newConfig = configChange.newValue || {};
+    const oldConfig = configChange.oldValue || {};
+    this.syncThemeConfig(sidebar, newConfig, oldConfig);
+    this.syncLanguageConfig(sidebar, newConfig, oldConfig);
+    this.syncAutoSaveConfig(sidebar, newConfig, oldConfig);
+  }
+
+  async refreshSidebarByStorageChange(sidebar, flags) {
+    if (!this.hasConversationDataChanges(flags)) return;
+    if (sidebar.currentTab === 'projects') {
+      await sidebar.renderProjects();
+      await sidebar.restoreProjectsViewState();
+      return;
+    }
+    if (sidebar.currentTab !== 'conversations') return;
+    if (sidebar.viewingConversationId) {
+      await sidebar.renderConversationDetailInToc(sidebar.viewingConversationId);
+      return;
+    }
+    await sidebar.renderConversationsList();
+  }
+
+  async handleStorageChanges(changes, areaName) {
+    if (!this.shouldHandleStorageChanges(changes, areaName)) return;
+
+    try {
+      const sidebar = window.sidebarUI;
+      const flags = this.getStorageChangeFlags(changes);
+
+      if (flags.hasProjects) {
+        const projects = await window.storageManager.getAllProjects();
+        window.projectManager.projects = projects;
+      }
+
+      if (!sidebar) return;
+      this.syncConfigChanges(sidebar, changes.config);
+      await this.refreshSidebarByStorageChange(sidebar, flags);
+    } catch (error) {
+      console.warn('[Sidebar Extension] Storage sync error:', error);
+    }
   }
 
   /**
@@ -267,13 +295,10 @@ class SidebarExtension {
 (function() {
   'use strict';
 
-  console.log('Sidebar Extension Content Script Loaded');
-
   // 检查是否在支持的平台页面
   const hostname = window.location.hostname;
   const isSupported = SUPPORTED_HOSTNAMES.some(h => hostname.includes(h) || h.includes(hostname));
   if (!isSupported) {
-    console.log('Not on a supported platform, extension will not activate');
     return;
   }
 
@@ -415,7 +440,7 @@ class SidebarExtension {
   function isExtensionContextValid() {
     try {
       return !!(chrome && chrome.runtime && chrome.runtime.id);
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -454,7 +479,7 @@ class SidebarExtension {
             }
           } catch (e) {
             if (e && e.message && e.message.includes('Extension context invalidated')) {
-              console.log('[ChatGPT Sidebar] Extension context invalidated');
+              extension.log('Extension context invalidated');
               sendResponse({ ok: false });
               return;
             }
@@ -489,7 +514,7 @@ class SidebarExtension {
     const currentUrl = location.href;
     if (currentUrl === lastUrl) return;
     lastUrl = currentUrl;
-    console.log('[Sidebar Extension] URL changed:', currentUrl);
+    extension.log('URL changed');
     if (extension.isOnConversationPage()) {
       if (!extension.initialized) {
         setTimeout(() => extension.init(), 300);
@@ -497,10 +522,41 @@ class SidebarExtension {
     }
   }
 
-  // MutationObserver 可捕获部分 SPA 更新
-  new MutationObserver(() => onUrlChange()).observe(document, { subtree: true, childList: true });
+  // 统一调度，避免短时间内多次触发重复检查
+  let urlCheckScheduled = false;
+  const scheduleUrlCheck = () => {
+    if (urlCheckScheduled) return;
+    urlCheckScheduled = true;
+    setTimeout(() => {
+      urlCheckScheduled = false;
+      onUrlChange();
+    }, 50);
+  };
 
-  // pushState/replaceState 不会触发 MutationObserver，用 popstate + 轮询
-  window.addEventListener('popstate', onUrlChange);
-  setInterval(() => onUrlChange(), 600);
+  // popstate/hashchange
+  window.addEventListener('popstate', scheduleUrlCheck);
+  window.addEventListener('hashchange', scheduleUrlCheck);
+
+  // hook pushState / replaceState，覆盖主流 SPA 路由场景
+  if (window.history && typeof window.history.pushState === 'function') {
+    const rawPushState = window.history.pushState;
+    window.history.pushState = function(...args) {
+      const ret = rawPushState.apply(this, args);
+      scheduleUrlCheck();
+      return ret;
+    };
+  }
+
+  if (window.history && typeof window.history.replaceState === 'function') {
+    const rawReplaceState = window.history.replaceState;
+    window.history.replaceState = function(...args) {
+      const ret = rawReplaceState.apply(this, args);
+      scheduleUrlCheck();
+      return ret;
+    };
+  }
+
+  if (window.navigation && window.navigation.addEventListener) {
+    window.navigation.addEventListener('navigate', scheduleUrlCheck);
+  }
 })();

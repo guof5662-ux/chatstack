@@ -22,7 +22,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   try {
     await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_SIDEBAR' });
-  } catch (e) {
+  } catch {
     // Content script 未注入（如页面未刷新过）时可能报错，忽略
   }
 });

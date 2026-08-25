@@ -5,7 +5,8 @@
 
 class StorageManager {
   constructor() {
-    this.DEBUG = true; // 开发模式日志开关
+    // 生产默认关闭，避免在页面控制台输出本地会话与项目数据。
+    this.DEBUG = false;
   }
 
   log(...args) {

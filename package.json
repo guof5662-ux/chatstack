@@ -1,0 +1,24 @@
+{
+  "name": "chatstack-sidebar",
+  "version": "1.2.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint core content background.js tests",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "validate:manifest": "node scripts/validate-manifest.mjs",
+    "check": "npm run lint && npm test && npm run validate:manifest"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "happy-dom": "^20.11.6",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "flatted": "3.4.4",
+    "picomatch": "4.0.7"
+  }
+}

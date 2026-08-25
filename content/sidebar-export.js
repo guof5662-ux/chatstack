@@ -322,7 +322,14 @@
       const conv = await window.storageManager.getConversation(this.sidebar.conversationId);
       const title = (conv && conv.title) || this._t('conv.defaultTitle');
       const base = this.safeFilename(`current_${title}_${this.sidebar.conversationId.slice(0, 8)}_blocks`);
-      return this.buildMessageFiles(base, title, this.sidebar.conversationId, selected, formats, undefined, conv);
+      return this.buildMessageFiles({
+        baseName: base,
+        title,
+        conversationId: this.sidebar.conversationId,
+        messages: selected,
+        formats,
+        conv
+      });
     }
 
     async buildHistoryExportFiles(formats) {
@@ -363,7 +370,15 @@
         }));
         const base = this.safeFilename(`${title}_${id.slice(0, 8)}`);
         const folderName = folderMap.get(id);
-        files.push(...this.buildMessageFiles(base, title, id, messages, formats, folderName, conv));
+        files.push(...this.buildMessageFiles({
+          baseName: base,
+          title,
+          conversationId: id,
+          messages,
+          formats,
+          folderName,
+          conv
+        }));
       }
       return files;
     }
@@ -401,12 +416,29 @@
         }));
         const base = this.safeFilename(`${title}_${id.slice(0, 8)}`);
         const folder = folderMap.get(id);
-        files.push(...this.buildMessageFiles(base, title, id, messages, formats, folder, conv));
+        files.push(...this.buildMessageFiles({
+          baseName: base,
+          title,
+          conversationId: id,
+          messages,
+          formats,
+          folderName: folder,
+          conv
+        }));
       }
       return files;
     }
 
-    buildMessageFiles(baseName, title, conversationId, messages, formats, folderName, conv) {
+    buildMessageFiles(options) {
+      const {
+        baseName,
+        title,
+        conversationId,
+        messages,
+        formats,
+        folderName,
+        conv
+      } = options || {};
       const files = [];
       const prefix = folderName ? this.safeFilename(folderName) + '/' : '';
       const platform = (conv && conv.platform) ? conv.platform : 'ChatGPT';

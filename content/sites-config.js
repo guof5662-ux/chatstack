@@ -15,7 +15,7 @@ const SUPPORTED_DOMAINS = [
 const SITES_CONFIG = {
   'chatgpt.com': {
     platformName: 'ChatGPT',
-    platformIcon: 'https://chatgpt.com/favicon.ico',
+    platformIcon: 'icons/chatgpt.png',
     selectors: {
       container: 'main',
       mainContainer: 'main',
@@ -28,7 +28,7 @@ const SITES_CONFIG = {
   },
   'chat.openai.com': {
     platformName: 'ChatGPT',
-    platformIcon: 'https://chatgpt.com/favicon.ico',
+    platformIcon: 'icons/chatgpt.png',
     selectors: {
       container: 'main',
       mainContainer: 'main',
@@ -41,7 +41,7 @@ const SITES_CONFIG = {
   },
   'claude.ai': {
     platformName: 'Claude',
-    platformIcon: 'https://claude.ai/favicon.ico',
+    platformIcon: 'icons/claude.ico',
     selectors: {
       container: '[data-test-render-count]',
       mainContainer: '[data-test-render-count]',
@@ -51,7 +51,7 @@ const SITES_CONFIG = {
   },
   'gemini.google.com': {
     platformName: 'Gemini',
-    platformIcon: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
+    platformIcon: 'icons/gemini.svg',
     useShadowDOM: true,
     selectors: {
       container: '#chat-history',
@@ -64,7 +64,7 @@ const SITES_CONFIG = {
   },
   'chat.deepseek.com': {
     platformName: 'DeepSeek',
-    platformIcon: 'https://cdn.deepseek.com/logo.png',
+    platformIcon: 'icons/deepseek.png',
     selectors: {
       container: '.dad65929',
       mainContainer: '.dad65929',

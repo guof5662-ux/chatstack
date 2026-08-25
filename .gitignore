@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+
+# 编辑器 / IDE
+.vscode/
+.idea/
+.cursor/
+
+# 依赖
+node_modules/
+coverage/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.env.*
+.env.local
+
+# 扩展打包产物
+*.zip
+
+# 仅在本地保留的评估、素材与工作过程
+docs/
+evaluation-results/
+GIT_WORKFLOW.md
+METHOD_COPY_GUIDE.md
+OPTIMIZATION_COMPLETE_REPORT.md
+OPTIMIZATION_SUMMARY_CN.md
+REFACTORING_COMPLETE_REPORT.md
+REFACTORING_GUIDE.md
+generate-icons.py
+remove_white_bg.py
+content/sidebar-backup-*.js
+content/sidebar-before-slimming.js
+content/sidebar-pre-bindevents.js
+content/sidebar-refactored.js

@@ -67,6 +67,7 @@ class I18nManager {
         'project.platformProjects': '同步自平台',
         'project.platformProjectsHint': '来自 ChatGPT、Gemini 等站点的文件夹，仅展示',
         'project.projectsInPlatform': '{platform} 中的项目',
+        'project.toggleExpand': '展开/收起项目',
 
         // 历史 · ChatGPT 区分
         'history.chatgpt.projects': '项目',
@@ -208,6 +209,7 @@ class I18nManager {
         'toast.cannotGetSessionId': '无法获取会话 ID',
         'toast.openConversationFirst': '请先打开或创建一个对话',
         'toast.convDeletedOnPlatform': '该对话已在原平台被删除，本地记录已清理',
+        'toast.convMayNeedManualOpen': '未在当前页面列表中找到该对话，已尝试直接打开',
 
         // 对话/项目 UI
         'conv.unnamed': '未命名对话',
@@ -280,6 +282,7 @@ class I18nManager {
         'project.platformProjects': 'Synced from platforms',
         'project.platformProjectsHint': 'Folders from ChatGPT, Gemini, etc. — display only',
         'project.projectsInPlatform': 'Projects in {platform}',
+        'project.toggleExpand': 'Expand/collapse project',
 
         // History · ChatGPT sections
         'history.chatgpt.projects': 'Projects',
@@ -421,6 +424,7 @@ class I18nManager {
         'toast.cannotGetSessionId': 'Cannot get session ID',
         'toast.openConversationFirst': 'Please open or create a conversation first',
         'toast.convDeletedOnPlatform': 'This conversation was deleted on the platform. Local record has been removed.',
+        'toast.convMayNeedManualOpen': 'Conversation not found in the current page list. Attempting direct open.',
 
         // Conversation / project UI
         'conv.unnamed': 'Unnamed conversation',

@@ -12,6 +12,35 @@
     return tokens.some((t) => (t.type === 'text' && t.value.trim()) || t.type === 'code' || t.type === 'link');
   }
 
+  function collectInlineChildren(node, collect) {
+    const tokens = [];
+    Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
+    return tokens;
+  }
+
+  function wrapInlineChildren(node, collect, type) {
+    const children = collectInlineChildren(node, collect);
+    return children.length ? [{ type, children }] : [];
+  }
+
+  function collectAnchorTokens(node, collect) {
+    const href = node.getAttribute('href') || '';
+    const children = collectInlineChildren(node, collect);
+    return children.length ? [{ type: 'link', href, children }] : [];
+  }
+
+  function collectElementInlineTokens(node, tag, collect) {
+    if (tag === 'br') return [{ type: 'br' }];
+    if (tag === 'strong' || tag === 'b') return wrapInlineChildren(node, collect, 'strong');
+    if (tag === 'em' || tag === 'i') return wrapInlineChildren(node, collect, 'em');
+    if (tag === 'code') {
+      const text = (node.textContent || '').replace(/\n/g, ' ').trim();
+      return text ? [{ type: 'code', value: text }] : [];
+    }
+    if (tag === 'a') return collectAnchorTokens(node, collect);
+    return collectInlineChildren(node, collect);
+  }
+
   function parseInlineTokens(root) {
     const collect = (node) => {
       if (!node) return [];
@@ -20,94 +49,84 @@
         return text ? [{ type: 'text', value: text }] : [];
       }
       if (node.nodeType !== Node.ELEMENT_NODE) return [];
-      const tag = node.tagName.toLowerCase();
-      if (tag === 'br') return [{ type: 'br' }];
-      if (tag === 'strong' || tag === 'b') {
-        const children = [];
-        Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
-        return children.length ? [{ type: 'strong', children }] : [];
-      }
-      if (tag === 'em' || tag === 'i') {
-        const children = [];
-        Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
-        return children.length ? [{ type: 'em', children }] : [];
-      }
-      if (tag === 'code') {
-        const text = (node.textContent || '').replace(/\n/g, ' ').trim();
-        return text ? [{ type: 'code', value: text }] : [];
-      }
-      if (tag === 'a') {
-        const href = node.getAttribute('href') || '';
-        const children = [];
-        Array.from(node.childNodes).forEach((child) => children.push(...collect(child)));
-        return children.length ? [{ type: 'link', href, children }] : [];
-      }
-      if (tag === 'mark' || tag === 'span') {
-        const tokens = [];
-        Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
-        return tokens;
-      }
-      const tokens = [];
-      Array.from(node.childNodes).forEach((child) => tokens.push(...collect(child)));
-      return tokens;
+      return collectElementInlineTokens(node, node.tagName.toLowerCase(), collect);
     };
-    const tokens = [];
-    Array.from(root.childNodes).forEach((child) => tokens.push(...collect(child)));
-    return tokens;
+    return collectInlineChildren(root, collect);
+  }
+
+  function parseTextNodeToBlocks(node) {
+    const text = normalizeInlineText(node.textContent || '');
+    if (!text.trim()) return [];
+    return [{ type: 'paragraph', inlines: [{ type: 'text', value: text }] }];
+  }
+
+  function parseParagraphBlock(node) {
+    const inlines = parseInlineTokens(node);
+    if (!hasInlineContent(inlines)) return [];
+    return [{ type: 'paragraph', inlines }];
+  }
+
+  function parseHeadingBlock(node, tag) {
+    const inlines = parseInlineTokens(node);
+    if (!hasInlineContent(inlines)) return [];
+    return [{ type: 'heading', level: parseInt(tag[1], 10), inlines }];
+  }
+
+  function parseCodeBlock(node) {
+    const codeEl = node.querySelector('code');
+    const text = (codeEl || node).textContent || '';
+    const langClass = codeEl && codeEl.className ? codeEl.className : node.className || '';
+    const langMatch = langClass.match(/language-([a-z0-9_-]+)/i);
+    const lang = langMatch ? langMatch[1] : '';
+    return [{ type: 'code', lang, text: text.replace(/\n$/, '') }];
+  }
+
+  function parseBlockquoteBlock(node) {
+    const inner = collectBlocks(node);
+    if (!inner.length) return [];
+    return [{ type: 'blockquote', blocks: inner }];
+  }
+
+  function parseGenericInlineBlock(node) {
+    const inlines = parseInlineTokens(node);
+    if (!hasInlineContent(inlines)) return [];
+    return [{ type: 'paragraph', inlines }];
+  }
+
+  function isHeadingTag(tag) {
+    return /^h[1-6]$/.test(tag);
+  }
+
+  function parseElementNodeToBlocks(node) {
+    const tag = node.tagName.toLowerCase();
+    if (isHeadingTag(tag)) return parseHeadingBlock(node, tag);
+
+    const handlers = {
+      p: parseParagraphBlock,
+      ul: parseList,
+      ol: parseList,
+      pre: parseCodeBlock,
+      blockquote: parseBlockquoteBlock,
+      table: parseTable,
+      hr: () => [{ type: 'hr' }],
+      div: collectBlocks,
+      section: collectBlocks,
+      article: collectBlocks,
+      br: () => [{ type: 'paragraph', inlines: [{ type: 'br' }] }]
+    };
+
+    const handler = handlers[tag];
+    if (!handler) return parseGenericInlineBlock(node);
+
+    const parsed = handler(node);
+    return Array.isArray(parsed) ? parsed : [parsed];
   }
 
   function nodeToBlocks(node) {
     if (!node) return [];
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = normalizeInlineText(node.textContent || '');
-      if (!text.trim()) return [];
-      return [{ type: 'paragraph', inlines: [{ type: 'text', value: text }] }];
-    }
+    if (node.nodeType === Node.TEXT_NODE) return parseTextNodeToBlocks(node);
     if (node.nodeType !== Node.ELEMENT_NODE) return [];
-    const tag = node.tagName.toLowerCase();
-    if (tag === 'p') {
-      const inlines = parseInlineTokens(node);
-      if (!hasInlineContent(inlines)) return [];
-      return [{ type: 'paragraph', inlines }];
-    }
-    if (tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || tag === 'h5' || tag === 'h6') {
-      const inlines = parseInlineTokens(node);
-      if (!hasInlineContent(inlines)) return [];
-      return [{ type: 'heading', level: parseInt(tag[1], 10), inlines }];
-    }
-    if (tag === 'ul' || tag === 'ol') {
-      return [parseList(node)];
-    }
-    if (tag === 'pre') {
-      const codeEl = node.querySelector('code');
-      const text = (codeEl || node).textContent || '';
-      const langClass = codeEl && codeEl.className ? codeEl.className : node.className || '';
-      const langMatch = langClass.match(/language-([a-z0-9_-]+)/i);
-      const lang = langMatch ? langMatch[1] : '';
-      return [{ type: 'code', lang, text: text.replace(/\n$/, '') }];
-    }
-    if (tag === 'blockquote') {
-      const inner = collectBlocks(node);
-      if (!inner.length) return [];
-      return [{ type: 'blockquote', blocks: inner }];
-    }
-    if (tag === 'table') {
-      return [parseTable(node)];
-    }
-    if (tag === 'hr') {
-      return [{ type: 'hr' }];
-    }
-    if (tag === 'div' || tag === 'section' || tag === 'article') {
-      return collectBlocks(node);
-    }
-    if (tag === 'br') {
-      return [{ type: 'paragraph', inlines: [{ type: 'br' }] }];
-    }
-    const inlines = parseInlineTokens(node);
-    if (hasInlineContent(inlines)) {
-      return [{ type: 'paragraph', inlines }];
-    }
-    return [];
+    return parseElementNodeToBlocks(node);
   }
 
   function collectBlocks(root) {

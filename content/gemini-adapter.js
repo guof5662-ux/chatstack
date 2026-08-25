@@ -29,10 +29,12 @@ class GeminiAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-      return chrome.runtime.getURL('icons/gemini.svg');
-    }
-    return this.siteConfig?.platformIcon || 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg';
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.getURL) {
+        return chrome.runtime.getURL(this.siteConfig?.platformIcon || 'icons/gemini.svg');
+      }
+    } catch {}
+    return '';
   }
 
   /**
@@ -62,7 +64,7 @@ class GeminiAdapter extends BasePlatformAdapter {
       }
 
       return validPatterns.some(p => p.test(pathname));
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -75,18 +77,39 @@ class GeminiAdapter extends BasePlatformAdapter {
     try {
       const pathname = (window.location.pathname || '').replace(/^\/+/, '');
       const segments = pathname.split('/');
-
-      if (segments[0] === 'app' && segments[1]) return segments[1];
-      if (segments[0] === 'gem' && segments.length >= 3 && segments[2]) return segments[2];
-      if (segments.length >= 4 && segments[2] === 'app' && segments[3]) return segments[3];
-      if (segments.length >= 5 && segments[2] === 'gem' && segments[4]) return segments[4];
-
-      const appMatch = window.location.href.match(/\/app\/([a-zA-Z0-9_-]+)/);
-      if (appMatch) return appMatch[1];
-      const chatMatch = window.location.href.match(/\/chat\/([a-zA-Z0-9_-]+)/);
-      if (chatMatch) return chatMatch[1];
-    } catch (e) {
+      return this.getConversationIdFromSegments(segments) || this.getConversationIdFromHref(window.location.href);
+    } catch {
       // ignore
+    }
+    return null;
+  }
+
+  getConversationIdFromSegments(segments) {
+    if (!Array.isArray(segments) || segments.length === 0) return null;
+
+    const candidates = [
+      { valid: segments[0] === 'app', id: segments[1] },
+      { valid: segments[0] === 'gem' && segments.length >= 3, id: segments[2] },
+      { valid: segments.length >= 4 && segments[2] === 'app', id: segments[3] },
+      { valid: segments.length >= 5 && segments[2] === 'gem', id: segments[4] }
+    ];
+
+    for (const candidate of candidates) {
+      if (candidate.valid && candidate.id) {
+        return candidate.id;
+      }
+    }
+
+    return null;
+  }
+
+  getConversationIdFromHref(href) {
+    const patterns = [/\/app\/([a-zA-Z0-9_-]+)/, /\/chat\/([a-zA-Z0-9_-]+)/];
+    for (const pattern of patterns) {
+      const match = String(href || '').match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
     }
     return null;
   }

@@ -5,7 +5,7 @@
 
 class BasePlatformAdapter {
   constructor() {
-    this.DEBUG = true;
+    this.DEBUG = false;
     this.conversationId = null;
     this.messages = []; // [{ id, role, content, element }]
     this.observer = null;
@@ -17,6 +17,8 @@ class BasePlatformAdapter {
     this.keepMessagesOnEmpty = false;
     this.maxEmptyParseStreak = 0; // 0=不限制；>0 表示允许空解析连续次数
     this.emptyParseStreak = 0;
+    this.urlWatchInterval = null;
+    this.navigationListener = null;
   }
 
   /**
@@ -145,7 +147,20 @@ class BasePlatformAdapter {
   stopObserving() {
     if (this.observer) {
       this.observer.disconnect();
+      this.observer = null;
       this.log('Stopped observing');
+    }
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    if (this.urlWatchInterval) {
+      clearInterval(this.urlWatchInterval);
+      this.urlWatchInterval = null;
+    }
+    if (this.navigationListener && window.navigation && window.navigation.removeEventListener) {
+      window.navigation.removeEventListener('navigate', this.navigationListener);
+      this.navigationListener = null;
     }
   }
 
@@ -153,7 +168,7 @@ class BasePlatformAdapter {
    * 处理 DOM 变化（带 debounce）
    * @param {Array} mutations
    */
-  handleMutations(mutations) {
+  handleMutations(_mutations) {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -181,47 +196,67 @@ class BasePlatformAdapter {
    */
   updateMessages(forceNotify = false) {
     const newMessages = this.parseMessages();
+    this.updateEmptyParseStreak(newMessages);
+
+    if (this.shouldKeepMessagesOnEmptyParse(newMessages, forceNotify)) {
+      this.log('Empty parse result, keep previous messages to avoid flicker');
+      return;
+    }
+
+    const changeInfo = this.getMessageChangeInfo(newMessages);
+    if (!changeInfo.countChanged && !changeInfo.contentChanged && !forceNotify) return;
+
+    this.messages = newMessages;
+    this.lastMessageCount = newMessages.length;
+    if (this.onMessagesUpdated) this.onMessagesUpdated(this.messages);
+    this.logMessageUpdate(changeInfo, forceNotify);
+  }
+
+  updateEmptyParseStreak(newMessages) {
     if (newMessages.length === 0) {
       this.emptyParseStreak += 1;
-    } else {
-      this.emptyParseStreak = 0;
+      return;
     }
+    this.emptyParseStreak = 0;
+  }
 
-    if (!forceNotify && this.keepMessagesOnEmpty && this.messages.length > 0 && newMessages.length === 0) {
-      const currentId = this.getConversationId ? this.getConversationId() : null;
-      const sameConversation = currentId && this.conversationId && currentId === this.conversationId;
-      const conversationUnclear = !currentId && this.conversationId;
-      const underStreakLimit = this.maxEmptyParseStreak <= 0 || this.emptyParseStreak <= this.maxEmptyParseStreak;
-      if ((sameConversation || conversationUnclear) && underStreakLimit) {
-        this.log('Empty parse result, keep previous messages to avoid flicker');
-        return;
-      }
+  shouldKeepMessagesOnEmptyParse(newMessages, forceNotify) {
+    if (forceNotify) return false;
+    if (!this.keepMessagesOnEmpty) return false;
+    if (this.messages.length === 0 || newMessages.length !== 0) return false;
+
+    const currentId = this.getConversationId ? this.getConversationId() : null;
+    const sameConversation = currentId && this.conversationId && currentId === this.conversationId;
+    const conversationUnclear = !currentId && this.conversationId;
+    const underStreakLimit = this.maxEmptyParseStreak <= 0 || this.emptyParseStreak <= this.maxEmptyParseStreak;
+    return (sameConversation || conversationUnclear) && underStreakLimit;
+  }
+
+  getLastMessageContentLength(messages) {
+    if (!messages.length) return 0;
+    const lastMessage = messages[messages.length - 1];
+    return lastMessage && lastMessage.content ? lastMessage.content.length : 0;
+  }
+
+  getMessageChangeInfo(newMessages) {
+    const previousCount = this.lastMessageCount;
+    const newCount = newMessages.length;
+    const countChanged = newCount !== previousCount;
+    const prevLastLen = this.getLastMessageContentLength(this.messages);
+    const newLastLen = this.getLastMessageContentLength(newMessages);
+    const contentChanged = !countChanged && newCount > 0 && newLastLen !== prevLastLen;
+    return { previousCount, newCount, countChanged, prevLastLen, newLastLen, contentChanged };
+  }
+
+  logMessageUpdate(changeInfo, forceNotify) {
+    if (changeInfo.countChanged) {
+      this.log('Messages updated:', changeInfo.previousCount, '->', changeInfo.newCount);
     }
-
-    const countChanged = newMessages.length !== this.lastMessageCount;
-    const prevLastLen = (this.messages.length && this.messages[this.messages.length - 1].content)
-      ? this.messages[this.messages.length - 1].content.length
-      : 0;
-    const newLastLen = (newMessages.length && newMessages[newMessages.length - 1].content)
-      ? newMessages[newMessages.length - 1].content.length
-      : 0;
-    const contentChanged = !countChanged && newMessages.length > 0 && newLastLen !== prevLastLen;
-
-    if (countChanged || contentChanged || forceNotify) {
-      this.messages = newMessages;
-      this.lastMessageCount = newMessages.length;
-      if (this.onMessagesUpdated) {
-        this.onMessagesUpdated(this.messages);
-      }
-      if (countChanged) {
-        this.log('Messages updated:', this.lastMessageCount, '->', newMessages.length);
-      }
-      if (contentChanged) {
-        this.log('Message content updated (streaming):', prevLastLen, '->', newLastLen);
-      }
-      if (forceNotify) {
-        this.log('Messages refreshed (force notify)');
-      }
+    if (changeInfo.contentChanged) {
+      this.log('Message content updated (streaming):', changeInfo.prevLastLen, '->', changeInfo.newLastLen);
+    }
+    if (forceNotify) {
+      this.log('Messages refreshed (force notify)');
     }
   }
 
@@ -258,14 +293,25 @@ class BasePlatformAdapter {
       }
     };
 
+    if (this.urlWatchInterval) {
+      clearInterval(this.urlWatchInterval);
+      this.urlWatchInterval = null;
+    }
+
+    if (this.navigationListener && window.navigation && window.navigation.removeEventListener) {
+      window.navigation.removeEventListener('navigate', this.navigationListener);
+      this.navigationListener = null;
+    }
+
     // 使用 setInterval 检查
-    setInterval(checkUrlChange, 1000);
+    this.urlWatchInterval = setInterval(checkUrlChange, 1000);
 
     // 使用 navigation API（现代浏览器）
     if (window.navigation) {
-      window.navigation.addEventListener('navigate', (e) => {
+      this.navigationListener = () => {
         setTimeout(checkUrlChange, 100);
-      });
+      };
+      window.navigation.addEventListener('navigate', this.navigationListener);
     }
   }
 

@@ -29,10 +29,12 @@ class ClaudeAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-      return chrome.runtime.getURL('icons/claude.ico');
-    }
-    return this.siteConfig?.platformIcon || 'https://claude.ai/favicon.ico';
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.getURL) {
+        return chrome.runtime.getURL(this.siteConfig?.platformIcon || 'icons/claude.ico');
+      }
+    } catch {}
+    return '';
   }
 
   /**
@@ -61,7 +63,7 @@ class ClaudeAdapter extends BasePlatformAdapter {
       }
       const match = window.location.href.match(/\/chat\/([^#]+?)(?:\?|$|#)/);
       return match ? match[1].replace(/\//g, '_') : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -226,14 +228,13 @@ class ClaudeAdapter extends BasePlatformAdapter {
    */
   getContentWithStructure(element, role) {
     if (!element) return '';
-    let html = '';
-    if (role === 'user') {
-      html = (element.innerHTML || '').trim();
-    } else {
+    const html = role === 'user'
+      ? (element.innerHTML || '').trim()
+      : (() => {
       const clone = element.cloneNode(true);
       this.removeThinkingBlocksInPlace(clone);
-      html = (clone.innerHTML || '').trim();
-    }
+      return (clone.innerHTML || '').trim();
+    })();
     if (!html) return '';
     if (typeof window !== 'undefined' && window.HtmlToMarkdown && window.HtmlToMarkdown.toText) {
       const text = window.HtmlToMarkdown.toText(html);

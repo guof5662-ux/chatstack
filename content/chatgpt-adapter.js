@@ -25,10 +25,12 @@ class ChatGPTAdapter extends BasePlatformAdapter {
   }
 
   getPlatformIcon() {
-    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-      return chrome.runtime.getURL('icons/chatgpt.png');
-    }
-    return this.siteConfig?.platformIcon || 'https://chatgpt.com/favicon.ico';
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime.getURL) {
+        return chrome.runtime.getURL(this.siteConfig?.platformIcon || 'icons/chatgpt.png');
+      }
+    } catch {}
+    return '';
   }
 
   /**
@@ -184,66 +186,78 @@ class ChatGPTAdapter extends BasePlatformAdapter {
     return m ? m[1] : null;
   }
 
+  normalizeProjectText(value) {
+    return (typeof value === 'string' ? value.trim() : '') || null;
+  }
+
+  getProjectNameFromQuery() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return this.normalizeProjectText(urlParams.get('project'));
+  }
+
+  getProjectNameFromDataAttribute() {
+    const dataEl = document.querySelector('[data-project-name]');
+    if (!dataEl) return null;
+    return this.normalizeProjectText(dataEl.getAttribute('data-project-name'));
+  }
+
+  getProjectNameFromSidebar(pathSlug) {
+    const links = document.querySelectorAll('a[href*="/g/"]');
+    for (const link of links) {
+      const href = (link.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '');
+      if (href.indexOf(`/g/${pathSlug}`) === -1 && href.indexOf(`/g/${pathSlug}/`) === -1) {
+        continue;
+      }
+      const text = this.normalizeProjectText(link.textContent);
+      if (text && text.length < 200) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  looksLikeConversationHeading(text) {
+    if (!text || text.length >= 50) return true;
+    if (/^[一二三四五六七八九十]、/.test(text)) return true;
+    if (text.includes('什么叫')) return true;
+    return false;
+  }
+
+  getProjectNameFromMainHeading() {
+    const mainSelectors = ['main h1', 'main header h1', '[role="main"] h1', 'main [role="heading"]', 'main h2'];
+    for (const selector of mainSelectors) {
+      const heading = document.querySelector(selector);
+      if (!heading) continue;
+      const text = this.normalizeProjectText(heading.textContent);
+      if (text && text.length < 200 && !this.looksLikeConversationHeading(text)) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  getProjectNameFromSlug(pathSlug) {
+    if (!pathSlug) return null;
+    if (pathSlug.startsWith('g-p-')) {
+      return pathSlug.replace(/^g-p-/, '').replace(/-/g, ' ') || pathSlug;
+    }
+    return pathSlug.replace(/-/g, ' ');
+  }
+
   /**
    * 尝试获取 ChatGPT 原生项目名（仅当 URL 含 /g/ 时解析）
    * @returns {string|null}
    */
   getProjectName() {
-    const trim = (s) => (typeof s === 'string' ? s.trim() : '') || null;
-    const path = window.location.pathname || '';
-    if (!path.includes('/g/')) return null;
-    const gMatch = path.match(/\/g\/([^/]+)/);
+    const pathSlug = this.getProjectSlug();
+    if (!pathSlug) return null;
 
     try {
-      // 1. URL 查询参数
-      const urlParams = new URLSearchParams(window.location.search);
-      const projectParam = urlParams.get('project');
-      if (projectParam) return trim(projectParam) || null;
-
-      // 2. data 属性
-      const dataEl = document.querySelector('[data-project-name]');
-      if (dataEl) {
-        const v = dataEl.getAttribute('data-project-name');
-        if (trim(v)) return trim(v);
-      }
-
-      // 3. 侧栏优先：项目页（含 /g/xxx）时先取侧栏当前项目链接文本
-      if (gMatch && gMatch[1]) {
-        const pathSlug = gMatch[1];
-        const links = document.querySelectorAll('a[href*="/g/"]');
-        for (const a of links) {
-          const href = (a.getAttribute('href') || '').replace(/^https?:\/\/[^/]+/, '');
-          if (href.indexOf('/g/' + pathSlug) !== -1 || href.indexOf('/g/' + pathSlug + '/') !== -1) {
-            const t = trim(a.textContent);
-            if (t && t.length < 200) return t;
-          }
-        }
-      }
-
-      // 4. 主内容区标题兜底
-      const looksLikeConversation = (t) => {
-        if (!t || t.length >= 50) return true;
-        if (/^[一二三四五六七八九十]、/.test(t)) return true;
-        if (t.includes('什么叫')) return true;
-        return false;
-      };
-      const mainSelectors = ['main h1', 'main header h1', '[role="main"] h1', 'main [role="heading"]', 'main h2'];
-      for (const sel of mainSelectors) {
-        const el = document.querySelector(sel);
-        if (el) {
-          const t = trim(el.textContent);
-          if (t && t.length < 200 && !looksLikeConversation(t)) return t;
-        }
-      }
-
-      // 5. 回退：URL 路径解析（仅能得到 slug）
-      if (gMatch && gMatch[1]) {
-        const slug = gMatch[1];
-        if (slug.startsWith('g-p-')) {
-          return slug.replace(/^g-p-/, '').replace(/-/g, ' ') || slug;
-        }
-        return slug.replace(/-/g, ' ');
-      }
+      return this.getProjectNameFromQuery() ||
+        this.getProjectNameFromDataAttribute() ||
+        this.getProjectNameFromSidebar(pathSlug) ||
+        this.getProjectNameFromMainHeading() ||
+        this.getProjectNameFromSlug(pathSlug);
     } catch (error) {
       this.log('Error getting ChatGPT project name:', error);
     }
@@ -323,7 +337,7 @@ class ChatGPTAdapter extends BasePlatformAdapter {
    * @param {string} role - 'user' | 'assistant'
    * @returns {string} 带结构的文本，无 HtmlToMarkdown 时返回空串由调用方回退
    */
-  getContentWithStructure(element, role) {
+  getContentWithStructure(element, _role) {
     if (!element) return '';
     const clone = element.cloneNode(true);
     clone.querySelectorAll('button, [role="button"], .copy-button, .regenerate-button').forEach((btn) => btn.remove());
@@ -402,7 +416,7 @@ class ChatGPTAdapter extends BasePlatformAdapter {
 
   _normalizeExtractedText(text) {
     if (!text) return '';
-    let t = text.replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n');
+    const t = text.replace(/[ \t]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n');
     return t.trim();
   }
 }
